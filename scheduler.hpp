@@ -6,6 +6,7 @@
 #include <boost/asio/spawn.hpp>
 #include <boost/chrono.hpp>
 #include <boost/thread.hpp>
+#include <boost/ref.hpp>
 
 #include <memory>
 
@@ -28,21 +29,30 @@ public:
     //std::cout << "Scheduler dtor done\n";
   }
 
-  virtual coro_completion_t Spawn(CoroFunc&& func) override {
+  virtual CoroHandle Spawn(CoroFunc&& func) override {
     std::promise<bool> promise;
     auto coro_finished_future = promise.get_future();
-    auto coro_func = [p = std::move(promise), func](const YieldContext& context) mutable {
-      func(context);
+    CoroHandle handle(std::move(coro_finished_future), this);
+    auto coro_func = [p = std::move(promise), func, &handle](const YieldContext& context) mutable {
+      func(context, handle);
       //std::cout << "(Scheduler): coro finished, completing future\n";
       p.set_value(true);
     };
     boost::asio::spawn(io_service_, std::move(coro_func));
-    return coro_finished_future;
+    //return coro_finished_future;
+    return handle;
   }
 
-  virtual bool Sleep(const boost::chrono::duration<double>& duration, YieldContext& context) override {
-    AsyncSleep sleepTask(io_service_);
-    return sleepTask.Sleep(duration, context);
+  virtual bool Sleep(
+      const boost::chrono::duration<double>& duration, 
+      YieldContext& context,
+      CoroHandle& handle) override {
+    std::shared_ptr<AsyncSleep> sleep_task = std::make_shared<AsyncSleep>(io_service_);
+    AsyncTaskId task_id = _AddTask(sleep_task);
+    handle.AddTask(task_id);
+    bool result = sleep_task->Sleep(duration, context);
+    handle.RemoveTask(task_id);
+    return result;
   }
 
   virtual bool WaitOnEvent(const AsyncTaskId& event_id, YieldContext& context) override {
@@ -56,14 +66,11 @@ public:
     }
   }
 
-  virtual AsyncTaskId AddEvent() override {
-    boost::lock_guard<boost::mutex> guard(tasks_mutex_);
-    AsyncTaskId task_id = next_task_id_++;
-    if (tasks_.find(task_id) != tasks_.end()) {
-      return InvalidTaskId;
-    }
+  virtual AsyncTaskId AddEvent(CoroHandle& handle) override {
     std::shared_ptr<AsyncEvent> event = std::make_shared<AsyncEvent>(io_service_);
+    AsyncTaskId task_id = _AddTask(event);
     tasks_[task_id] = std::move(event);
+    handle.AddTask(task_id);
     return task_id;
   }
 
@@ -87,6 +94,15 @@ public:
   }
 
 //protected:
+  AsyncTaskId _AddTask(const std::shared_ptr<AsyncTask>& task) {
+    boost::lock_guard<boost::mutex> guard(tasks_mutex_);
+    AsyncTaskId task_id = next_task_id_++;
+    if (tasks_.find(task_id) != tasks_.end()) {
+      return InvalidTaskId;
+    }
+    tasks_[task_id] = std::move(task);
+    return task_id;
+  }
   std::shared_ptr<AsyncTask> _GetTask(const AsyncTaskId& task_id) {
     boost::lock_guard<boost::mutex> guard(tasks_mutex_);
     if (tasks_.find(task_id) != tasks_.end()) {

@@ -16,4 +16,4 @@ async_event_test: test/async_event_test.cc
 	$(CC) $(CFLAGS) -I $(GTEST_ROOT)/include -I . -I $(BOOST_INCLUDE_DIR) $(LIB_DIRS) -L $(GMOCK_ROOT)/gtest -lgtest -lgtest_main $(LIBS) test/async_event_test.cc -o test/async_event_test
 
 scheduler_test: test/scheduler_test.cc
-	$(CC) $(CFLAGS) -I $(GTEST_ROOT)/include -I . -I $(BOOST_INCLUDE_DIR) $(LIB_DIRS) -L $(GMOCK_ROOT)/gtest -lgtest -lgtest_main $(LIBS) test/scheduler_test.cc -o test/scheduler_test
+	$(CC) $(CFLAGS) -I $(GTEST_ROOT)/include -I . -I $(BOOST_INCLUDE_DIR) $(LIB_DIRS) -L $(GMOCK_ROOT)/gtest -lgtest -lgtest_main $(LIBS) coro_handle.cc test/scheduler_test.cc -o test/scheduler_test
