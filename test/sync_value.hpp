@@ -1,34 +1,32 @@
 #pragma once
 
-#include <boost/thread.hpp>
-#include <boost/chrono.hpp>
 #include <boost/optional.hpp>
+#include <future>
 
-// Helpful wrapper around condition variable which encapsulates all
-//  the locking, setting, and waiting logic
+namespace sc = std::chrono;
+
+// Helpful wrapper around promise which makes it easy to wait for a
+//  timeout and either get nothing or the value
 template<typename T>
 class SyncValue {
 public:
-  SyncValue() : condition_(false) {}
-  boost::optional<T> WaitForValue(const boost::chrono::milliseconds& timeout) {
-    boost::mutex::scoped_lock lock(mutex_);
-    // If we don't already have the value, wait for it
-    if (!value_) {
-      cond_.wait_for(lock, timeout);
-    }
-    // By here, we either already had the value or we timed out.
-    //  Either way, return whatever we've got (which will either be
-    //  the actual value or an empty optional)
-    return value_;
+  SyncValue() {
+    future_ = promise_.get_future();
   }
+  boost::optional<T> WaitForValue(const sc::duration<double>& timeout) {
+    auto status = future_.wait_for(timeout);
+    if (status == std::future_status::ready) {
+      return future_.get();
+    } else {
+      return boost::none;
+    }
+  }
+
   void SetValue(T value) {
-    boost::mutex::scoped_lock lock(mutex_);
-    value_ = value;
-    cond_.notify_one();
+    promise_.set_value(value);
   }
 protected:
-  boost::condition_variable cond_;
-  boost::optional<T> value_;
-  bool condition_;
-  boost::mutex mutex_;
+  std::future<T> future_;
+  std::promise<T> promise_;
+  std::future<T> value_;
 };

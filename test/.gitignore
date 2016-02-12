@@ -1,4 +1,2 @@
-scheduler_test
-async_event_test
-async_sleep_test
-*.dSYM
+*
+!*.cc

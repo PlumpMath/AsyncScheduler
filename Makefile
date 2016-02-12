@@ -12,8 +12,8 @@ GMOCK_ROOT=./googletest/googlemock
 async_sleep_test: test/async_sleep_test.cc
 	$(CC) $(CFLAGS) -I $(GTEST_ROOT)/include -I . -I $(BOOST_INCLUDE_DIR) $(LIB_DIRS) -L $(GMOCK_ROOT)/gtest -lgtest -lgtest_main $(LIBS) test/async_sleep_test.cc -o test/async_sleep_test
 
-async_event_test: test/async_event_test.cc
-	$(CC) $(CFLAGS) -I $(GTEST_ROOT)/include -I . -I $(BOOST_INCLUDE_DIR) $(LIB_DIRS) -L $(GMOCK_ROOT)/gtest -lgtest -lgtest_main $(LIBS) test/async_event_test.cc -o test/async_event_test
+async_semaphore_test: test/async_semaphore_test.cc
+	$(CC) $(CFLAGS) -I $(GTEST_ROOT)/include -I . -I $(BOOST_INCLUDE_DIR) $(LIB_DIRS) -L $(GMOCK_ROOT)/gtest -lgtest -lgtest_main $(LIBS) test/async_semaphore_test.cc -o test/async_semaphore_test
 
-scheduler_test: test/scheduler_test.cc
-	$(CC) $(CFLAGS) -I $(GTEST_ROOT)/include -I . -I $(BOOST_INCLUDE_DIR) $(LIB_DIRS) -L $(GMOCK_ROOT)/gtest -lgtest -lgtest_main $(LIBS) test/scheduler_test.cc -o test/scheduler_test
+async_future_test: test/async_future_test.cc
+	$(CC) $(CFLAGS) -I $(GTEST_ROOT)/include -I . -I $(BOOST_INCLUDE_DIR) $(LIB_DIRS) -L $(GMOCK_ROOT)/gtest -lgtest -lgtest_main $(LIBS) test/async_future_test.cc -o test/async_future_test

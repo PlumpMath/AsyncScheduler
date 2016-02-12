@@ -2,57 +2,46 @@
 
 #include <boost/asio.hpp>
 #include <boost/asio/spawn.hpp>
+#include <boost/optional.hpp>
 
+#include "async_semaphore.hpp"
 #include "async_task.h"
 
-//TODO: like an asyncevent, but it carries data (Wait has a return)
-
-//TODO: at this point, all accesses to this task should all be done
-// through a single thread...that way there's no race when notifying
-// or cancelling an event
-class AsyncEvent : public AsyncTask {
+// Not thread safe
+template<typename T>
+class AsyncFuture : public AsyncTask {
 public:
-  AsyncEvent(boost::asio::io_service& io_service) :
-      timer_(io_service), cancelled_(false), notified_(false) {}
-
-  // Returns true if the event being waited on was fired, false if the
-  //  event was cancelled
-  bool Wait(const boost::asio::yield_context& context) {
-    if (notified_) {
-      notified_ = false;
-      return true;
-    } else if (cancelled_) {
-      cancelled_ = false;
-      return false;
-    }
-    boost::system::error_code ec;
-    timer_.async_wait(context[ec]);
-    if (notified_) {
-      notified_ = false;
-      return true;
-    } else if (cancelled_) {
-      cancelled_ = false;
-      return false;
-    }
-    //shouldn't get here
-    assert(false);
-    return false;
+  AsyncFuture(boost::asio::io_service& io_service) :
+    semaphore_(io_service) {
   }
 
-  void Notify() {
-    //std::cout << "(AsyncEvent): Notifying event\n";
-    notified_ = true;
-    timer_.cancel_one();
-  }
-
-  void Cancel() override {
-    //std::cout << "(AsyncEvent): Cancelling event\n";
+  virtual void Cancel() override {
     cancelled_ = true;
-    timer_.expires_from_now(boost::posix_time::seconds(-1));
+    semaphore_.Cancel();
+  }
+
+  boost::optional<T> Get(boost::asio::yield_context& context) {
+    if (cancelled_) {
+      return boost::none;
+    }
+    if (value_) {
+      return value_;
+    }
+    if (!semaphore_.Wait(context)) {
+      return boost::none;
+    }
+    return value_;
+  }
+
+  void SetValue(T value) {
+    if (!cancelled_) {
+      value_ = value;
+      semaphore_.Raise();
+    }
   }
 
 //protected:
-  boost::asio::deadline_timer timer_;
-  std::atomic_bool cancelled_;
-  std::atomic_bool notified_;
+  boost::optional<T> value_;
+  AsyncSemaphore semaphore_; 
+  bool cancelled_ = false;
 };
