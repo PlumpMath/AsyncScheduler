@@ -1,9 +1,4 @@
 WIP
 
-AsyncScheduler using coroutines in C++
-
-TODO:
--build needs cleanup
--better coroutine class cleanup support: 
---currently have to wait for sleeps to finish, as no handle to the event is given (like other events)
--lots more
+This branch is an attempt to work from the desired API first, and make sure the
+scheduler can satisfy that.  tweaking things as it grows, so starting simple for now.
