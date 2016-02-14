@@ -2,6 +2,7 @@
 
 #include <boost/asio.hpp>
 #include <boost/asio/spawn.hpp>
+#include <boost/optional.hpp>
 
 #include <future>
 
@@ -11,9 +12,7 @@
 class AsyncExecutor : public AsyncTask {
 public:
   AsyncExecutor(
-      boost::asio::io_service& io_service,
-      const std::function<void()>& func) :
-    func_(func),
+      boost::asio::io_service& io_service) :
     io_service_(io_service) {}
 
   // Since the function itself is executed synchrnously, it can
@@ -23,24 +22,22 @@ public:
     cancelled_ = true;
   }
 
-  //TODO: have this return a std::future<boost::optional<T>> where T
-  // is the return value of the func. (allow for more flexibility on the
-  // given function and get its return value)
-  std::future<bool> Run() {
-    auto p = std::make_shared<std::promise<bool>>();
+  template<typename Functor>
+  boost::optional<std::future<typename std::result_of<Functor()>::type>>
+  Run(const Functor& func) {
+    auto p = std::make_shared<std::promise<typename std::result_of<Functor()>::type>>();
     if (!cancelled_) {
-      io_service_.post([p, this]() {
-        func_();
-        p->set_value(true);
+      io_service_.post([p, func]() {
+        p->set_value(func());
       });
     } else {
-      p->set_value(false);
+      return boost::none;
     }
     return p->get_future();
   }
       
 //protected:
   bool cancelled_ = false;
-  std::function<void()> func_;
+  //Functor func_;
   boost::asio::io_service& io_service_;
 };

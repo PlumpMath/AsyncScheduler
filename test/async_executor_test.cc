@@ -13,33 +13,69 @@ using namespace std;
 
 class AsyncExecutorTest : public ::testing::Test {
 public:
+  AsyncExecutorTest() :
+    executor_(io_service_) {}
+
   boost::asio::io_service io_service_;
+  AsyncExecutor executor_;
 };
 
 TEST_F(AsyncExecutorTest, TestRun) {
-  SyncValue<bool> func_run;
   auto func = [&]() {
-    func_run.SetValue(true);
+    return 42;
   };
-  AsyncExecutor executor(io_service_, func);
-  auto run_res = executor.Run();
+  auto run_res = executor_.Run(func);
   io_service_.run_one();
-  ASSERT_TRUE(run_res.get());
-  auto res = func_run.WaitForValue(10ms);
-  ASSERT_TRUE(res);
-  ASSERT_TRUE(res.get());
+  ASSERT_TRUE(run_res);
+  auto run_fut = std::move(run_res.get());
+  ASSERT_EQ(42, run_fut.get());
 }
 
 TEST_F(AsyncExecutorTest, TestCancel) {
-  SyncValue<bool> func_run;
   auto func = [&]() {
-    func_run.SetValue(true);
+    return 42;
   };
-  AsyncExecutor executor(io_service_, func);
-  executor.Cancel();
-  auto run_res = executor.Run();
+  executor_.Cancel();
+  auto run_res = executor_.Run(func);
+  ASSERT_FALSE(run_res);
+}
+
+TEST_F(AsyncExecutorTest, TestDifferentType) {
+  auto func = [&]() {
+    return "42";
+  };
+  auto run_res = executor_.Run(func);
   io_service_.run_one();
-  ASSERT_FALSE(run_res.get());
-  auto res = func_run.WaitForValue(10ms);
-  ASSERT_FALSE(res);
+  ASSERT_TRUE(run_res);
+  auto run_fut = std::move(run_res.get());
+  ASSERT_TRUE(strncmp("42", run_fut.get(), 2) == 0);
+}
+
+class Foo {
+public:
+  bool doBool(bool v) {
+    return v;
+  }
+  
+  int doInt(int v) {
+    return v;
+  }
+};
+
+TEST_F(AsyncExecutorTest, TestMemberFunction) {
+  Foo foo;
+  auto run_res = executor_.Run(boost::bind(&Foo::doBool, &foo, false));
+  io_service_.run_one();
+  ASSERT_TRUE(run_res);
+  auto run_fut = std::move(run_res.get());
+  ASSERT_EQ(false, run_fut.get());
+}
+
+TEST_F(AsyncExecutorTest, TestMemberFunction2) {
+  Foo foo;
+  auto run_res = executor_.Run(boost::bind(&Foo::doInt, &foo, 42));
+  io_service_.run_one();
+  ASSERT_TRUE(run_res);
+  auto run_fut = std::move(run_res.get());
+  ASSERT_EQ(42, run_fut.get());
 }
