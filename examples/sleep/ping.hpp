@@ -9,6 +9,8 @@
 using namespace std::literals;
 
 // A class which 'sends' a ping every second
+// TODO: have another set of work to do to show the 'sleep'
+//  call does not block the thread
 class Ping {
 public:
   void Start() {
@@ -24,7 +26,12 @@ public:
   void Run(boost::asio::yield_context context) {
     while (running_) {
       SendPing();
-      if(!scheduler_.Sleep(1s, context) || !running_) {
+      // The decision to exit the coroutine loop is an implementation detail.
+      //  Here, the exit logic has been defined as:
+      //  "If either the sleep call returned false (meaning it was cancelled before
+      //    completing) or 'running_' has been set to false, then we should shut
+      //    down and exit"
+      if (!scheduler_.Sleep(1s, context) || !running_) {
         std::cout << "Stopping\n";
         break;
       }

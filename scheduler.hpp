@@ -11,23 +11,43 @@
 
 #include <boost/bind.hpp>
 
+// Single-threaded coroutine scheduler.
+// The scheduler will keep track of all coroutines as well as
+//  all asynchronous tasks so that it can be shut down cleanly.
+//  in order to do so, it must keep track of all the asynchronous task
+//  objects so that it can cancel them when the user wants.  In order to
+//  prevent synchronizing access to the container which holds those tasks,
+//  all access to them is posted through the scheduler's internal thread.
+//  This means that, in addition to servicing the tasks the user schedules,
+//  the scheduler's thread also has to service some management operations
+//  of the scheduler itself.  This allows calls like 'Sleep' to operate
+//  efficiently: no (blocking) synchronization is necessary to add and remove the 
+//  sleep task to the task container.
 class Scheduler {
 public:
   Scheduler() :
     work_(new boost::asio::io_service::work(io_service_)),
     thread_(boost::bind(&boost::asio::io_service::run, &io_service_)) {
-    //thread_(std::bind(&boost::asio::io_service::run, &io_service_)) {
   }
 
+  // this method can be called from any thread (except thread_)
   ~Scheduler() {
+    assert(thread_.get_id() != boost::this_thread::get_id());
     io_service_.stop();
     thread_.join();
   }
 
   // this method could be called from any thread (except the scheduler thread)
+  // it will block until the all the following conditions are met:
+  //  1) the running state of the scheduler has been halted, so we know
+  //      no more coroutines or asynchronous tasks will be initiated
+  //  2) all asynchronous tasks have been cancelled
+  //  3) the coroutine has successfully be exited
+  // once all of the above have been guaranteed, we know we've shut things
+  //  down safely.
   void Stop() {
+    assert(thread_.get_id() != boost::this_thread::get_id());
     printf("Scheduler::Stop\n");
-    // it will block until the all the following conditions are met
     // we need to prevent any new coroutines/async operations
     //  from being started
     auto running_state_updated = std::make_shared<std::promise<bool>>();
@@ -82,6 +102,7 @@ public:
 
     // Wrap the call to spawn so we can check 'running_' from the scheduler thread
     auto spawn_wrapper = [coro_completion, c = std::move(coro_wrapper), this]() {
+      assert(thread_.get_id() == boost::this_thread::get_id());
       printf("Inside spawn wrapper, checking running state\n");
       if (running_) {
         printf("Inside spawn wrapper, still running, spawning coroutine \n");
@@ -101,6 +122,7 @@ public:
   bool Sleep(
       const std::chrono::duration<double>& duration,
       boost::asio::yield_context& context) {
+    assert(thread_.get_id() == boost::this_thread::get_id());
     if (running_) {
       auto sleep = std::make_shared<AsyncSleep>(io_service_);
       auto task_id = next_task_id++;
