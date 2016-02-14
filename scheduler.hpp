@@ -19,6 +19,11 @@ public:
     //thread_(std::bind(&boost::asio::io_service::run, &io_service_)) {
   }
 
+  ~Scheduler() {
+    io_service_.stop();
+    thread_.join();
+  }
+
   // this method could be called from any thread (except the scheduler thread)
   void Stop() {
     printf("Scheduler::Stop\n");
@@ -54,8 +59,9 @@ public:
     printf("Scheduler::Stop tasks cancelled\n");
     // we need to wait for the coroutine to finish
     printf("Scheduler::Stop waiting for coroutine to finish\n");
-    //TODO: need to check if the future is valid
-    //coro_finished_future_.wait();
+    if (coro_finished_future_.valid()) {
+      coro_finished_future_.wait();
+    }
     printf("Scheduler::Stop coroutine finished\n");
   }
 

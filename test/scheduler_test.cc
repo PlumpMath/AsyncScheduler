@@ -41,6 +41,34 @@ TEST_F(SchedulerTest, TestSpawnStopped) {
   ASSERT_FALSE(res);
 }
 
+// Test async sleep
+TEST_F(SchedulerTest, TestAsyncSleep) {
+  SyncValue<bool> sleep_result;
+  auto sleeper = [&](boost::asio::yield_context context) {
+    sleep_result.SetValue(scheduler_.Sleep(100ms, context));
+  };
+  scheduler_.SpawnCoroutine(sleeper);
+  auto res = sleep_result.WaitForValue(1s);
+  ASSERT_TRUE(res);
+  ASSERT_TRUE(res.get());
+}
+
+// Test stopping the scheduler while sleeping
+TEST_F(SchedulerTest, TestStopWhileSleeping) {
+  SyncValue<bool> spawned;
+  SyncValue<bool> sleep_result;
+  auto sleeper = [&](boost::asio::yield_context context) {
+    spawned.SetValue(true);
+    sleep_result.SetValue(scheduler_.Sleep(100s, context));
+  };
+  scheduler_.SpawnCoroutine(sleeper);
+  ASSERT_TRUE(spawned.WaitForValue(1s));
+  scheduler_.Stop();
+  auto res = sleep_result.WaitForValue(1s);
+  ASSERT_TRUE(res);
+  ASSERT_FALSE(res.get());
+}
+
 /*
 TEST_F(AsyncSleepTest, TestSleep) {
   SyncValue<bool> sleep_result;
