@@ -23,11 +23,27 @@ public:
   }
 
   template<typename Functor>
-  boost::optional<std::future<typename std::result_of<Functor()>::type>>
+  std::shared_future<typename std::result_of<Functor()>::type>>
   Run(const Functor& func) {
     auto p = std::make_shared<std::promise<typename std::result_of<Functor()>::type>>();
     if (!cancelled_) {
       io_service_.post([p, func]() {
+        p->set_value(func());
+      });
+    }
+    return p->get_future();
+  }
+
+  /*
+  template<typename Functor>
+  boost::optional<std::future<typename std::result_of<Functor()>::type>>
+  Run(const Functor& func) {
+    printf("AsyncExecutor, running\n");
+    auto p = std::make_shared<std::promise<typename std::result_of<Functor()>::type>>();
+    if (!cancelled_) {
+      printf("AsyncExecutor, not cancelled, posting function\n");
+      io_service_.post([p, func]() {
+        printf("AsyncExecutor, calling ACTUAL function\n");
         p->set_value(func());
       });
     } else {
@@ -35,9 +51,9 @@ public:
     }
     return p->get_future();
   }
+  */
       
 //protected:
   bool cancelled_ = false;
-  //Functor func_;
   boost::asio::io_service& io_service_;
 };
