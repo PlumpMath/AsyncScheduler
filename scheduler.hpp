@@ -2,10 +2,12 @@
 
 #include <boost/asio.hpp>
 #include <boost/asio/spawn.hpp>
+#include <boost/optional.hpp>
 #include <boost/thread.hpp>
 
 #include <functional>
 #include <future>
+#include <type_traits>
 
 #include "async_sleep.hpp"
 
@@ -42,7 +44,8 @@ public:
   //  1) the running state of the scheduler has been halted, so we know
   //      no more coroutines or asynchronous tasks will be initiated
   //  2) all asynchronous tasks have been cancelled
-  //  3) the coroutine has successfully be exited
+  //  3) all 'posted' functions have finished
+  //  4) the coroutine has successfully be exited
   // once all of the above have been guaranteed, we know we've shut things
   //  down safely.
   void Stop() {
@@ -77,6 +80,20 @@ public:
     printf("Scheduler::Stop waiting for task cancel\n");
     tasks_cancelled_future.wait();
     printf("Scheduler::Stop tasks cancelled\n");
+    // we need to make sure all posted functions have finished
+    auto functions_finished = std::make_shared<std::promise<bool>>();
+    auto functions_finisheds_future = functions_finished->get_future();
+    io_service_.post([functions_finished, this]() mutable {
+      printf("Scheduler::Stop inside waiting for posted functions to finish\n");
+      for (auto&& f : post_func_finished_futures_) {
+        f.wait();
+      }
+      functions_finished->set_value(true);
+    });
+    printf("Scheduler::Stop waiting for all posted functions to finished\n");
+    functions_finisheds_future.wait();
+    printf("Scheduler::Stop all posted functions finished\n");
+
     // we need to wait for the coroutine to finish
     printf("Scheduler::Stop waiting for coroutine to finish\n");
     if (coro_finished_future_.valid()) {
@@ -134,6 +151,45 @@ public:
     return false;
   }
 
+  // Specialization for void funcs
+  template<typename Functor, typename = typename std::enable_if<std::is_void<typename std::result_of<Functor()>::type>::value>::type>
+  void
+  Post(const Functor& func) {
+    auto func_wrapper = [func, this]() mutable {
+      if (running_) {
+        std::promise<bool> post_func_ran_p;
+        post_func_finished_futures_.push_back(post_func_ran_p.get_future());
+        func();
+        post_func_ran_p.set_value(true);
+      } else {
+        //TODO: should we notify the caller in some way if we're not going to
+        // run it at all?
+      }
+    };
+    io_service_.post(std::move(func_wrapper));
+  }
+
+  // For non-void funcs
+  template<typename Functor, typename = typename std::enable_if<!std::is_void<typename std::result_of<Functor()>::type>::value>::type>
+  std::future<typename std::result_of<Functor()>::type>
+  Post(const Functor& func) {
+    auto func_promise = std::make_shared<std::promise<typename std::result_of<Functor()>::type>>();
+    auto func_future = func_promise->get_future();
+    auto func_wrapper = [func, func_promise, this]() mutable {
+      if (running_) {
+        std::promise<bool> post_func_ran_p;
+        post_func_finished_futures_.push_back(post_func_ran_p.get_future());
+        func_promise->set_value(func());
+        post_func_ran_p.set_value(true);
+      } else {
+        //TODO: should we notify the caller in some way if we're not going to
+        // run it at all?
+      }
+    };
+    io_service_.post(std::move(func_wrapper));
+    return func_future;
+  }
+
 //protected:
   boost::asio::io_service io_service_;
   boost::asio::io_service::work* work_;
@@ -148,6 +204,7 @@ public:
 
   // Can only be accessed via thread_
   std::map<int, std::shared_ptr<AsyncTask>> tasks_;
+  std::list<std::future<bool>> post_func_finished_futures_;
 
   std::future<bool> coro_finished_future_;
 };

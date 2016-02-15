@@ -69,52 +69,41 @@ TEST_F(SchedulerTest, TestStopWhileSleeping) {
   ASSERT_FALSE(res.get());
 }
 
-/*
-TEST_F(AsyncSleepTest, TestSleep) {
-  SyncValue<bool> sleep_result;
-  auto sleep_func = [&](boost::asio::yield_context context) {
-    sleep_result.SetValue(async_sleep_.Sleep(10ms, context));
+TEST_F(SchedulerTest, TestPost) {
+  auto func = []() {
+    return 42;
   };
+  auto res = scheduler_.Post(func);
+  ASSERT_EQ(42, res.get());
+}
 
-  boost::asio::spawn(io_service_, move(sleep_func));
-  io_service_.run();
-  auto res = sleep_result.WaitForValue(1s);
+TEST_F(SchedulerTest, TestPostVoidFunc) {
+  SyncValue<bool> func_ran;
+  auto func = [&]() {
+    func_ran.SetValue(true);
+  };
+  scheduler_.Post(func);
+  auto res = func_ran.WaitForValue(1s);
   ASSERT_TRUE(res);
   ASSERT_TRUE(res.get());
 }
 
-TEST_F(AsyncSleepTest, TestCancel) {
-  SyncValue<bool> sleep_result;
-  auto sleep_func = [&](boost::asio::yield_context context) {
-    sleep_result.SetValue(async_sleep_.Sleep(100s, context));
+// Test stopping the scheduler while a posted function is running
+// TODO: technically it's possible here that the posted function
+//  finishes before we ever call Stop.  it's a bit tricky to guarantee
+//  that the posted function is in the middle of running while we call
+//  stop.
+TEST_F(SchedulerTest, TestStopWhilePosting) {
+  SyncValue<bool> post_func_running;
+  SyncValue<bool> post_func_ran;
+  auto func = [&]() {
+    post_func_running.SetValue(true);
+    std::this_thread::sleep_for(4s);
+    post_func_ran.SetValue(true);
+    return 42;
   };
-
-  boost::asio::spawn(io_service_, move(sleep_func));
-  // This 'run_one' will spawn the coroutine and do the sleep.
-  //  Since the sleep is asynchronous, once it enters the sleep
-  //  it'll return control back to us (the test), so we know
-  //  the coroutine is sleeping when this first run_one is done
-  io_service_.run_one();
-  async_sleep_.Cancel();
-  // run the io_service again to allow the sleep to see it's been
-  //  cancelled and wake up
-  io_service_.run_one();
-  auto res = sleep_result.WaitForValue(2s);
-  ASSERT_TRUE(res);
-  ASSERT_FALSE(res.get());
+  scheduler_.Post(func);
+  ASSERT_TRUE(post_func_running.WaitForValue(1s));
+  scheduler_.Stop();
+  ASSERT_TRUE(post_func_ran.WaitForValue(1s));
 }
-
-TEST_F(AsyncSleepTest, TestSleepOnCancelledSleepEvent) {
-  SyncValue<bool> sleep_result;
-  auto sleep_func = [this, &sleep_result](boost::asio::yield_context context) {
-    sleep_result.SetValue(async_sleep_.Sleep(2s, context));
-  };
-
-  async_sleep_.Cancel();
-  boost::asio::spawn(io_service_, move(sleep_func));
-  io_service_.run();
-  auto res = sleep_result.WaitForValue(2s);
-  ASSERT_TRUE(res);
-  ASSERT_FALSE(res.get());
-}
-*/
