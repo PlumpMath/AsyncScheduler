@@ -208,12 +208,14 @@ public:
   // TODO: for methods that COULD be called from the scheduler thread, 
   //  we might want to look at using 'dispatch' instead of 'post'
   void RaiseSemaphore(int semaphore_handle) {
-    io_service_.post([&]() {
+    io_service_.post([semaphore_handle, this]() {
       if (tasks_.find(semaphore_handle) != tasks_.end()) {
         auto semaphore = std::dynamic_pointer_cast<AsyncSemaphore>(tasks_[semaphore_handle]);
         if (semaphore) {
           semaphore->Raise();
         }
+      } else {
+        //TODO
       }
     });
   }
