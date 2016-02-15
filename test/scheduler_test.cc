@@ -107,3 +107,36 @@ TEST_F(SchedulerTest, TestStopWhilePosting) {
   scheduler_.Stop();
   ASSERT_TRUE(post_func_ran.WaitForValue(1s));
 }
+
+TEST_F(SchedulerTest, TestSemaphore) {
+  SyncValue<bool> sem_result;
+  auto semaphore_handle = scheduler_.CreateSemaphore().get();
+  auto func = [&](boost::asio::yield_context context) {
+    sem_result.SetValue(scheduler_.WaitOnSemaphore(semaphore_handle, context));
+  };
+
+  scheduler_.SpawnCoroutine(func);
+  auto res = sem_result.WaitForValue(100ms);
+  ASSERT_FALSE(res);
+  scheduler_.RaiseSemaphore(semaphore_handle);
+  res = sem_result.WaitForValue(100ms);
+  ASSERT_TRUE(res);
+  ASSERT_TRUE(res.get());
+}
+
+TEST_F(SchedulerTest, TestStopWhileWaitingOnSemaphore) {
+  SyncValue<bool> coro_run;
+  SyncValue<bool> sem_result;
+  auto semaphore_handle = scheduler_.CreateSemaphore().get();
+  auto func = [&](boost::asio::yield_context context) {
+    coro_run.SetValue(true);
+    sem_result.SetValue(scheduler_.WaitOnSemaphore(semaphore_handle, context));
+  };
+
+  scheduler_.SpawnCoroutine(func);
+  ASSERT_TRUE(coro_run.WaitForValue(1s));
+  scheduler_.Stop();
+  auto res = sem_result.WaitForValue(10ms);
+  ASSERT_TRUE(res);
+  ASSERT_FALSE(res.get());
+}

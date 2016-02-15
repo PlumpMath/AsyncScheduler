@@ -10,6 +10,7 @@
 #include <type_traits>
 
 #include "async_sleep.hpp"
+#include "async_semaphore.hpp"
 
 #include <boost/bind.hpp>
 
@@ -188,6 +189,44 @@ public:
     };
     io_service_.post(std::move(func_wrapper));
     return func_future;
+  }
+
+  // Returns a future to a handle to the created semaphore
+  std::future<int> CreateSemaphore() {
+    auto promise = std::make_shared<std::promise<int>>();
+    auto future = promise->get_future();
+    io_service_.post([promise, this]() mutable {
+      auto semaphore = std::make_shared<AsyncSemaphore>(io_service_);
+      auto task_id = next_task_id++;
+      tasks_[task_id] = semaphore;
+      promise->set_value(task_id);
+    });
+    return future;
+  }
+
+  // could be called from any thread
+  // TODO: for methods that COULD be called from the scheduler thread, 
+  //  we might want to look at using 'dispatch' instead of 'post'
+  void RaiseSemaphore(int semaphore_handle) {
+    io_service_.post([&]() {
+      if (tasks_.find(semaphore_handle) != tasks_.end()) {
+        auto semaphore = std::dynamic_pointer_cast<AsyncSemaphore>(tasks_[semaphore_handle]);
+        if (semaphore) {
+          semaphore->Raise();
+        }
+      }
+    });
+  }
+
+  // like 'Sleep', we know this call will be made from thread_
+  bool WaitOnSemaphore(int semaphore_handle, boost::asio::yield_context& context) {
+    if (tasks_.find(semaphore_handle) != tasks_.end()) {
+      auto semaphore = std::dynamic_pointer_cast<AsyncSemaphore>(tasks_[semaphore_handle]);
+      if (semaphore) {
+        return semaphore->Wait(context);
+      }
+    }
+    return false;
   }
 
 //protected:
