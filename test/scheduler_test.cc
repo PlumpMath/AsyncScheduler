@@ -19,7 +19,6 @@ public:
 TEST_F(SchedulerTest, TestSpawn) {
   SyncValue<bool> func_spawned;
   auto spawn_func = [&](boost::asio::yield_context context) {
-    printf("spawned\n");
     func_spawned.SetValue(true);
   };
   scheduler_.SpawnCoroutine(spawn_func);
@@ -28,11 +27,29 @@ TEST_F(SchedulerTest, TestSpawn) {
   ASSERT_TRUE(res.get());
 }
 
+TEST_F(SchedulerTest, TestSpawnMultiple) {
+  SyncValue<bool> func1_spawned;
+  auto spawn_func1 = [&](auto context) {
+    func1_spawned.SetValue(true);
+  };
+  SyncValue<bool> func2_spawned;
+  auto spawn_func2 = [&](auto context) {
+    func2_spawned.SetValue(true);
+  };
+  scheduler_.SpawnCoroutine(spawn_func1);
+  scheduler_.SpawnCoroutine(spawn_func2);
+  auto res1 = func1_spawned.WaitForValue(1s);
+  ASSERT_TRUE(res1);
+  ASSERT_TRUE(res1.get());
+  auto res2 = func2_spawned.WaitForValue(1s);
+  ASSERT_TRUE(res2);
+  ASSERT_TRUE(res2.get());
+}
+
 // Call spawn after the scheduler has been stopped
 TEST_F(SchedulerTest, TestSpawnStopped) {
   SyncValue<bool> func_spawned;
   auto spawn_func = [&](boost::asio::yield_context context) {
-    printf("spawned\n");
     func_spawned.SetValue(true);
   };
   scheduler_.Stop();
@@ -139,4 +156,38 @@ TEST_F(SchedulerTest, TestStopWhileWaitingOnSemaphore) {
   auto res = sem_result.WaitForValue(10ms);
   ASSERT_TRUE(res);
   ASSERT_FALSE(res.get());
+}
+
+
+
+
+
+// Stop the scheduler while it has active sleeps, semaphores and coroutines
+TEST_F(SchedulerTest, TestStopWithActiveOperations) {
+  SyncValue<bool> semaphore_wait_done;
+  SyncValue<bool> sleep_done;
+  auto semaphore_handle = scheduler_.CreateSemaphore().get();
+  auto semaphore_waiter = [&](auto context) {
+    scheduler_.WaitOnSemaphore(semaphore_handle, context);
+    semaphore_wait_done.SetValue(true);
+    printf("coro sem finishing\n");
+  };
+
+  auto sleeper = [&](auto context) {
+    scheduler_.Sleep(100s, context);
+    sleep_done.SetValue(true);
+    printf("coro sleep finishing\n");
+  };
+
+  scheduler_.SpawnCoroutine(semaphore_waiter);
+  scheduler_.SpawnCoroutine(sleeper);
+
+  scheduler_.Stop();
+  auto res_sem = semaphore_wait_done.WaitForValue(1s);
+  ASSERT_TRUE(res_sem);
+  ASSERT_TRUE(res_sem.get());
+
+  auto res_sleep = sleep_done.WaitForValue(1s);
+  ASSERT_TRUE(res_sleep);
+  ASSERT_TRUE(res_sleep.get());
 }

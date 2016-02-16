@@ -97,8 +97,10 @@ public:
 
     // we need to wait for the coroutine to finish
     printf("Scheduler::Stop waiting for coroutine to finish\n");
-    if (coro_finished_future_.valid()) {
-      coro_finished_future_.wait();
+    for (auto&& cff : coro_finished_futures_) {
+      if (cff.valid()) {
+        cff.wait();
+      }
     }
     printf("Scheduler::Stop coroutine finished\n");
   }
@@ -107,7 +109,7 @@ public:
   void SpawnCoroutine(std::function<void(boost::asio::yield_context)>&& coro_func) {
     printf("Scheduler::SpawnCoroutine\n");
     auto coro_completion = std::make_shared<std::promise<bool>>();
-    coro_finished_future_ = coro_completion->get_future();
+    coro_finished_futures_.push_back(coro_completion->get_future());
 
     // Wrap the coroutine call so we can automatically set the coroutine completion
     //  future when it exits
@@ -134,9 +136,7 @@ public:
     io_service_.post(std::move(spawn_wrapper));
   }
 
-  // We know the thread executing this method will always be thread_,
-  //  since it has to be called from within the coroutine (to get the
-  //  context) and the coroutine is always executed by thread_
+  // Can only be called from this scheduler's worker thread
   bool Sleep(
       const std::chrono::duration<double>& duration,
       boost::asio::yield_context& context) {
@@ -220,7 +220,7 @@ public:
     });
   }
 
-  // like 'Sleep', we know this call will be made from thread_
+  // Can only be called from this scheduler's worker thread
   bool WaitOnSemaphore(int semaphore_handle, boost::asio::yield_context& context) {
     if (tasks_.find(semaphore_handle) != tasks_.end()) {
       auto semaphore = std::dynamic_pointer_cast<AsyncSemaphore>(tasks_[semaphore_handle]);
@@ -247,5 +247,5 @@ public:
   std::map<int, std::shared_ptr<AsyncTask>> tasks_;
   std::list<std::future<bool>> post_func_finished_futures_;
 
-  std::future<bool> coro_finished_future_;
+  std::list<std::future<bool>> coro_finished_futures_;
 };
