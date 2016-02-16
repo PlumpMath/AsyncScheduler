@@ -9,18 +9,27 @@
 using namespace std::literals;
 
 // A class which 'sends' a ping every second
-// TODO: have another set of work to do to show the 'sleep'
-//  call does not block the thread
 class Ping {
 public:
   void Start() {
     running_ = true;
     scheduler_.SpawnCoroutine(boost::bind(&Ping::Run, this, _1));
+    scheduler_.SpawnCoroutine(boost::bind(&Ping::DoOtherStuff, this, _1));
   }
 
   void Stop() {
     running_ = false;
     scheduler_.Stop();
+  }
+
+  void DoOtherStuff(boost::asio::yield_context context) {
+    while (running_) {
+      printf("Doing other stuff\n");
+      if (!scheduler_.Sleep(2s, context) || !running_) {
+        std::cout << "Stopping other stuff\n";
+        break;
+      }
+    }
   }
 
   void Run(boost::asio::yield_context context) {
