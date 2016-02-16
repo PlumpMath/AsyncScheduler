@@ -158,6 +158,46 @@ TEST_F(SchedulerTest, TestStopWhileWaitingOnSemaphore) {
   ASSERT_FALSE(res.get());
 }
 
+TEST_F(SchedulerTest, TestFuture) {
+  SyncValue<int> fut_result;
+  int future_handle = scheduler_.CreateFuture<int>().get();
+  auto waiter = [&](boost::asio::yield_context context) {
+    auto result = scheduler_.WaitOnFuture<int>(future_handle, context);
+    if (result) {
+      fut_result.SetValue(result.get());
+    }
+  };
+
+  boost::thread thread_([&]() {
+    int x = 0;
+    for (int i = 0; i < 1000; ++i) {
+      x += i;
+    }
+    scheduler_.SetFutureValue(future_handle, x);
+  });
+  scheduler_.SpawnCoroutine(waiter);
+  auto res = fut_result.WaitForValue(1s);
+  ASSERT_TRUE(res);
+  ASSERT_EQ(499500, res.get());
+}
+
+TEST_F(SchedulerTest, TestCancelFuture) {
+  SyncValue<bool> coro_started;
+  SyncValue<bool> got_future_result;
+  int future_handle = scheduler_.CreateFuture<int>().get();
+  auto waiter = [&](boost::asio::yield_context context) {
+    coro_started.SetValue(true);
+    auto result = scheduler_.WaitOnFuture<int>(future_handle, context);
+    got_future_result.SetValue(!!result);
+  };
+
+  scheduler_.SpawnCoroutine(waiter);
+  ASSERT_TRUE(coro_started.WaitForValue(1s));
+  scheduler_.Stop();
+  auto res = got_future_result.WaitForValue(1s);
+  ASSERT_TRUE(res);
+  ASSERT_FALSE(res.get());
+}
 
 
 
@@ -166,21 +206,27 @@ TEST_F(SchedulerTest, TestStopWhileWaitingOnSemaphore) {
 TEST_F(SchedulerTest, TestStopWithActiveOperations) {
   SyncValue<bool> semaphore_wait_done;
   SyncValue<bool> sleep_done;
+  SyncValue<bool> future_wait_done;
   auto semaphore_handle = scheduler_.CreateSemaphore().get();
+  auto future_handle = scheduler_.CreateFuture<int>().get();
   auto semaphore_waiter = [&](auto context) {
     scheduler_.WaitOnSemaphore(semaphore_handle, context);
     semaphore_wait_done.SetValue(true);
-    printf("coro sem finishing\n");
   };
 
   auto sleeper = [&](auto context) {
     scheduler_.Sleep(100s, context);
     sleep_done.SetValue(true);
-    printf("coro sleep finishing\n");
+  };
+
+  auto future_waiter = [&](auto context) {
+    auto result = scheduler_.WaitOnFuture<int>(future_handle, context);
+    future_wait_done.SetValue(true);
   };
 
   scheduler_.SpawnCoroutine(semaphore_waiter);
   scheduler_.SpawnCoroutine(sleeper);
+  scheduler_.SpawnCoroutine(future_waiter);
 
   scheduler_.Stop();
   auto res_sem = semaphore_wait_done.WaitForValue(1s);
@@ -190,4 +236,8 @@ TEST_F(SchedulerTest, TestStopWithActiveOperations) {
   auto res_sleep = sleep_done.WaitForValue(1s);
   ASSERT_TRUE(res_sleep);
   ASSERT_TRUE(res_sleep.get());
+
+  auto res_fut = future_wait_done.WaitForValue(1s);
+  ASSERT_TRUE(res_fut);
+  ASSERT_TRUE(res_fut.get());
 }

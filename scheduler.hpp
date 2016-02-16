@@ -9,6 +9,7 @@
 #include <future>
 #include <type_traits>
 
+#include "async_future.hpp"
 #include "async_sleep.hpp"
 #include "async_semaphore.hpp"
 
@@ -230,6 +231,45 @@ public:
     }
     return false;
   }
+
+  template<typename T>
+  std::future<int> CreateFuture() {
+    auto promise = std::make_shared<std::promise<int>>();
+    auto future = promise->get_future();
+    io_service_.post([promise, this]() mutable {
+      auto semaphore = std::make_shared<AsyncFuture<T>>(io_service_);
+      auto task_id = next_task_id++;
+      tasks_[task_id] = semaphore;
+      promise->set_value(task_id);
+    });
+    return future;
+  }
+  
+  template<typename T>
+  void SetFutureValue(int future_handle, T value) {
+    io_service_.post([future_handle, value, this]() {
+      if (tasks_.find(future_handle) != tasks_.end()) {
+        auto future = std::dynamic_pointer_cast<AsyncFuture<T>>(tasks_[future_handle]);
+        if (future) {
+          future->SetValue(value);
+        }
+      } else {
+        //TODO
+      }
+    });
+  }
+
+  template<typename T>
+  boost::optional<T> WaitOnFuture(int future_handle, boost::asio::yield_context context) {
+    if (tasks_.find(future_handle) != tasks_.end()) {
+      auto future = std::dynamic_pointer_cast<AsyncFuture<T>>(tasks_[future_handle]);
+      if (future) {
+        return future->Get(context);
+      }
+    }
+    return false;
+  }
+
 
 //protected:
   boost::asio::io_service io_service_;
