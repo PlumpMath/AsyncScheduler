@@ -96,7 +96,7 @@ public:
     functions_finisheds_future.wait();
     printf("Scheduler::Stop all posted functions finished\n");
 
-    // we need to wait for the coroutine to finish
+    // we need to wait for the coroutines to finish
     printf("Scheduler::Stop waiting for coroutine to finish\n");
     for (auto&& cff : coro_finished_futures_) {
       if (cff.valid()) {
@@ -138,6 +138,8 @@ public:
   }
 
   // Can only be called from this scheduler's worker thread
+  // (i.e. this should only be called from within a coroutine
+  // spawned by this scheduler)
   bool Sleep(
       const std::chrono::duration<double>& duration,
       boost::asio::yield_context& context) {
@@ -222,6 +224,8 @@ public:
   }
 
   // Can only be called from this scheduler's worker thread
+  // (i.e. this should only be called from within a coroutine
+  // spawned by this scheduler)
   bool WaitOnSemaphore(int semaphore_handle, boost::asio::yield_context& context) {
     if (tasks_.find(semaphore_handle) != tasks_.end()) {
       auto semaphore = std::dynamic_pointer_cast<AsyncSemaphore>(tasks_[semaphore_handle]);
@@ -259,6 +263,10 @@ public:
     });
   }
 
+
+  // Can only be called from the scheduler's thread
+  // (i.e. this should only be called from within a coroutine
+  // spawned by this scheduler)
   template<typename T>
   boost::optional<T> WaitOnFuture(int future_handle, boost::asio::yield_context context) {
     if (tasks_.find(future_handle) != tasks_.end()) {
