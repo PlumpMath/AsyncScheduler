@@ -29,6 +29,7 @@
 //  sleep task to the task container.
 class Scheduler {
 public:
+  typedef int task_handle_t;
   Scheduler() :
     work_(new boost::asio::io_service::work(io_service_)),
     thread_(boost::bind(&boost::asio::io_service::run, &io_service_)) {
@@ -236,17 +237,24 @@ public:
     return false;
   }
 
+  // We can afford to block on getting the future here because:
+  // 1) If this is called on the scheduler thread, 'dispatch'
+  //     will execute the posted code inline, so we'll get it immediately
+  // 2) If this is called on a non-scheduler thread, then we know the scheduler
+  //     thread is free to service the posted task and will complete the future
+  //     soon.  Note: because this may block, it shouldn't be called in a place
+  //     where that's unacceptable.
   template<typename T>
-  std::future<int> CreateFuture() {
+  task_handle_t CreateFuture() {
     auto promise = std::make_shared<std::promise<int>>();
     auto future = promise->get_future();
-    io_service_.post([promise, this]() mutable {
+    io_service_.dispatch([promise, this]() mutable {
       auto semaphore = std::make_shared<AsyncFuture<T>>(io_service_);
       auto task_id = next_task_id++;
       tasks_[task_id] = semaphore;
       promise->set_value(task_id);
     });
-    return future;
+    return future.get();
   }
   
   template<typename T>

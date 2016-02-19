@@ -158,9 +158,9 @@ TEST_F(SchedulerTest, TestStopWhileWaitingOnSemaphore) {
   ASSERT_FALSE(res.get());
 }
 
-TEST_F(SchedulerTest, TestFuture) {
+TEST_F(SchedulerTest, TestCreateFutureFromNonSchedulerThread) {
   SyncValue<int> fut_result;
-  int future_handle = scheduler_.CreateFuture<int>().get();
+  auto future_handle = scheduler_.CreateFuture<int>();
   auto waiter = [&](boost::asio::yield_context context) {
     auto result = scheduler_.WaitOnFuture<int>(future_handle, context);
     if (result) {
@@ -181,10 +181,34 @@ TEST_F(SchedulerTest, TestFuture) {
   ASSERT_EQ(499500, res.get());
 }
 
-TEST_F(SchedulerTest, TestCancelFuture) {
+TEST_F(SchedulerTest, TestCreateFutureFromSchedulerThread) {
+  SyncValue<int> fut_result;
+  auto do_work =[&](int future_handle) {
+    int x = 0;
+    for (int i = 0; i < 1000; ++i) {
+      x += i;
+    }
+    scheduler_.SetFutureValue(future_handle, x);
+  };
+  auto waiter = [&](boost::asio::yield_context context) {
+    auto future_handle = scheduler_.CreateFuture<int>();
+    std::async(std::launch::async, do_work, future_handle);
+    auto res = scheduler_.WaitOnFuture<int>(future_handle, context);
+    if (res) {
+      fut_result.SetValue(res.get());
+    }
+  };
+
+  scheduler_.SpawnCoroutine(waiter);
+  auto res = fut_result.WaitForValue(1s);
+  ASSERT_TRUE(res);
+  ASSERT_EQ(499500, res.get());
+}
+
+TEST_F(SchedulerTest, TestStopSchedulerWhileWaitingOnFuture) {
   SyncValue<bool> coro_started;
   SyncValue<bool> got_future_result;
-  int future_handle = scheduler_.CreateFuture<int>().get();
+  auto future_handle = scheduler_.CreateFuture<int>();
   auto waiter = [&](boost::asio::yield_context context) {
     coro_started.SetValue(true);
     auto result = scheduler_.WaitOnFuture<int>(future_handle, context);
@@ -199,16 +223,38 @@ TEST_F(SchedulerTest, TestCancelFuture) {
   ASSERT_FALSE(res.get());
 }
 
+TEST_F(SchedulerTest, TestAsyncFuture) {
+  /*
+  bool use_async = true;
+  auto do_stuff = []() {
+    return 42;
+  };
+
+  SyncValue<int> result;
+  auto coro = [&](auto context) {
+    auto future_handle = scheduler_.Post(do_stuff, use_async);
+    auto res = scheduler_.WaitOnFuture<int>(future_handle, context);
+    //auto res = future->Get(context);
+    ASSERT_TRUE(res);
+    result.SetValue(res.get());
+  };
+
+  scheduler_.SpawnCoroutine(coro);
+  auto res = result.WaitForValue(1s);
+  ASSERT_TRUE(res);
+  ASSERT_EQ(42, res.get());
+  */
+}
 
 
 
-// Stop the scheduler while it has active sleeps, semaphores and coroutines
+// Stop the scheduler while it has active sleeps, semaphores, futures and coroutines
 TEST_F(SchedulerTest, TestStopWithActiveOperations) {
   SyncValue<bool> semaphore_wait_done;
   SyncValue<bool> sleep_done;
   SyncValue<bool> future_wait_done;
   auto semaphore_handle = scheduler_.CreateSemaphore().get();
-  auto future_handle = scheduler_.CreateFuture<int>().get();
+  auto future_handle = scheduler_.CreateFuture<int>();
   auto semaphore_waiter = [&](auto context) {
     scheduler_.WaitOnSemaphore(semaphore_handle, context);
     semaphore_wait_done.SetValue(true);
