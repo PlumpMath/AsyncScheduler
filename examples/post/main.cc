@@ -1,6 +1,6 @@
 #include <cstdlib>
 
-#include "ao_datastore.hpp"
+#include "active_object_datastore.hpp"
 
 #include <boost/thread.hpp>
 

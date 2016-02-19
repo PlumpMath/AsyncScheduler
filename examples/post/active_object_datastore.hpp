@@ -11,18 +11,18 @@ template<typename Key, typename Value>
 class AODataStore {
 public:
   void AddValue(Key key, Value value) {
-    return scheduler_.Post(boost::bind(&AODataStore::_DoAddValue, this, key, value));
+    return scheduler_.Post(std::bind(&AODataStore::_DoAddValue, this, key, value));
   }
 
   boost::optional<Value> GetValue(int key) {
-    auto res = scheduler_.Post(boost::bind(&AODataStore::_DoGetValue, this, key));
+    auto res = scheduler_.Post(std::bind(&AODataStore::_DoGetValue, this, key));
     // We could just return the future here, but doing it this way totally hides
     //  the asynchronous behavior of the AODataStore implementation from the user
     return res.get();
   }
 
   void RemoveValue(int key) {
-    return scheduler_.Post(boost::bind(&AODataStore::_DoRemoveValue, this, key));
+    return scheduler_.Post(std::bind(&AODataStore::_DoRemoveValue, this, key));
   }
 
 //protected:
