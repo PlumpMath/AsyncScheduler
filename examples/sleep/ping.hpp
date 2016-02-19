@@ -8,7 +8,8 @@
 
 using namespace std::literals;
 
-// A class which 'sends' a ping every second
+// A class which 'sends' a ping every second and does some other
+//  work inbetween.
 class Ping {
 public:
   void Start() {
