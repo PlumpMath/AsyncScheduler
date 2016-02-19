@@ -196,23 +196,21 @@ public:
   }
 
   // Returns a future to a handle to the created semaphore
-  std::future<int> CreateSemaphore() {
+  task_handle_t CreateSemaphore() {
     auto promise = std::make_shared<std::promise<int>>();
     auto future = promise->get_future();
-    io_service_.post([promise, this]() mutable {
+    io_service_.dispatch([promise, this]() mutable {
       auto semaphore = std::make_shared<AsyncSemaphore>(io_service_);
       auto task_id = next_task_id++;
       tasks_[task_id] = semaphore;
       promise->set_value(task_id);
     });
-    return future;
+    return future.get();
   }
 
   // could be called from any thread
-  // TODO: for methods that COULD be called from the scheduler thread, 
-  //  we might want to look at using 'dispatch' instead of 'post'
   void RaiseSemaphore(int semaphore_handle) {
-    io_service_.post([semaphore_handle, this]() {
+    io_service_.dispatch([semaphore_handle, this]() {
       if (tasks_.find(semaphore_handle) != tasks_.end()) {
         auto semaphore = std::dynamic_pointer_cast<AsyncSemaphore>(tasks_[semaphore_handle]);
         if (semaphore) {
@@ -224,9 +222,8 @@ public:
     });
   }
 
-  // Can only be called from this scheduler's worker thread
-  // (i.e. this should only be called from within a coroutine
-  // spawned by this scheduler)
+  // Must be called from this scheduler's thread
+  // (i.e. inside a coroutine spawned by this scheduler)
   bool WaitOnSemaphore(int semaphore_handle, boost::asio::yield_context& context) {
     if (tasks_.find(semaphore_handle) != tasks_.end()) {
       auto semaphore = std::dynamic_pointer_cast<AsyncSemaphore>(tasks_[semaphore_handle]);
