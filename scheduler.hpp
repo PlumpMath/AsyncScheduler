@@ -108,6 +108,7 @@ public:
     printf("Scheduler::Stop coroutine finished\n");
   }
 
+  // Spawn a new coroutine
   // this method could be called from any thread
   void SpawnCoroutine(std::function<void(boost::asio::yield_context)>&& coro_func) {
     printf("Scheduler::SpawnCoroutine\n");
@@ -136,6 +137,8 @@ public:
       }
     };
 
+    //TODO: this should be a dispatch. change it and add tests for both (called from thread_ and another thread)
+    // cases
     io_service_.post(std::move(spawn_wrapper));
   }
 
@@ -157,6 +160,7 @@ public:
     return false;
   }
 
+  // Post a provided function to the scheduler to be executed by the scheduler's thread.
   // Specialization for void funcs
   template<typename Functor, typename = typename std::enable_if<std::is_void<typename std::result_of<Functor()>::type>::value>::type>
   void
@@ -176,6 +180,7 @@ public:
   }
 
   // Post for non-void funcs which returns a handle to an AsyncFuture
+  // Call with something like: scheduler.Post(func, Scheduler::UseAsync);
   template<typename Functor, typename = typename std::enable_if<!std::is_void<typename std::result_of<Functor()>::type>::value>::type>
   task_handle_t
   Post(const Functor& func, bool) {
@@ -216,7 +221,8 @@ public:
     return func_future;
   }
 
-  // Returns a future to a handle to the created semaphore
+  // Returns a handle to the created semaphore
+  // could be called from any thread
   task_handle_t CreateSemaphore() {
     auto promise = std::make_shared<std::promise<int>>();
     auto future = promise->get_future();
@@ -246,6 +252,7 @@ public:
   // Must be called from this scheduler's thread
   // (i.e. inside a coroutine spawned by this scheduler)
   bool WaitOnSemaphore(int semaphore_handle, boost::asio::yield_context& context) {
+    assert(thread_.get_id() == boost::this_thread::get_id());
     if (tasks_.find(semaphore_handle) != tasks_.end()) {
       auto semaphore = std::dynamic_pointer_cast<AsyncSemaphore>(tasks_[semaphore_handle]);
       if (semaphore) {
@@ -275,8 +282,10 @@ public:
     return future.get();
   }
   
+  // could be called from any thread
   template<typename T>
   void SetFutureValue(int future_handle, T value) {
+    //TODO: change to dispatch
     io_service_.post([future_handle, value, this]() {
       if (tasks_.find(future_handle) != tasks_.end()) {
         auto future = std::dynamic_pointer_cast<AsyncFuture<T>>(tasks_[future_handle]);
@@ -295,6 +304,7 @@ public:
   // spawned by this scheduler)
   template<typename T>
   boost::optional<T> WaitOnFuture(int future_handle, boost::asio::yield_context context) {
+    assert(thread_.get_id() == boost::this_thread::get_id());
     if (tasks_.find(future_handle) != tasks_.end()) {
       auto future = std::dynamic_pointer_cast<AsyncFuture<T>>(tasks_[future_handle]);
       if (future) {
@@ -310,7 +320,7 @@ public:
   boost::asio::io_service::work* work_;
   boost::thread thread_;
 
-  // Members below here Can only be accesed via thread_
+  // Members below here can only be accesed via thread_
   bool running_ = true;
   int next_task_id = 0;
 
