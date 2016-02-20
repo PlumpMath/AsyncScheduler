@@ -30,6 +30,7 @@
 class Scheduler {
 public:
   typedef int task_handle_t;
+  static bool UseAsync;
   Scheduler() :
     work_(new boost::asio::io_service::work(io_service_)),
     thread_(boost::bind(&boost::asio::io_service::run, &io_service_)) {
@@ -174,6 +175,26 @@ public:
     io_service_.post(std::move(func_wrapper));
   }
 
+  // Post for non-void funcs which returns a handle to an AsyncFuture
+  template<typename Functor, typename = typename std::enable_if<!std::is_void<typename std::result_of<Functor()>::type>::value>::type>
+  task_handle_t
+  Post(const Functor& func, bool) {
+    auto future_handle = CreateFuture<typename std::result_of<Functor()>::type>();
+    auto func_wrapper = [func, future_handle, this]() mutable {
+      if (running_) {
+        std::promise<bool> post_func_ran_p;
+        post_func_finished_futures_.push_back(post_func_ran_p.get_future());
+        SetFutureValue(future_handle, func());
+        post_func_ran_p.set_value(true);
+      } else {
+        //TODO: should we notify the caller in some way if we're not going to
+        // run it at all?
+      }
+    };
+    io_service_.post(std::move(func_wrapper));
+    return future_handle;
+  }
+
   // For non-void funcs
   template<typename Functor, typename = typename std::enable_if<!std::is_void<typename std::result_of<Functor()>::type>::value>::type>
   std::future<typename std::result_of<Functor()>::type>
@@ -287,18 +308,15 @@ public:
 //protected:
   boost::asio::io_service io_service_;
   boost::asio::io_service::work* work_;
-
-  // Can only be accesed via thread_
-  bool running_ = true;
-
   boost::thread thread_;
 
-  // Can only be accessed via thread_
+  // Members below here Can only be accesed via thread_
+  bool running_ = true;
   int next_task_id = 0;
 
-  // Can only be accessed via thread_
   std::map<int, std::shared_ptr<AsyncTask>> tasks_;
   std::list<std::future<bool>> post_func_finished_futures_;
-
   std::list<std::future<bool>> coro_finished_futures_;
 };
+
+bool Scheduler::UseAsync = true;

@@ -6,7 +6,7 @@
 
 #include <boost/asio.hpp>
 #include <boost/asio/spawn.hpp>
-#include <boost/thread.hpp>
+#include <thread>
 
 using namespace std::chrono;
 using namespace std;
@@ -187,8 +187,7 @@ TEST_F(SchedulerTest, TestCreateFutureFromNonSchedulerThread) {
       fut_result.SetValue(result.get());
     }
   };
-
-  boost::thread thread_([&]() {
+  std::async(std::launch::async, [&]() {
     int x = 0;
     for (int i = 0; i < 1000; ++i) {
       x += i;
@@ -243,18 +242,15 @@ TEST_F(SchedulerTest, TestStopSchedulerWhileWaitingOnFuture) {
   ASSERT_FALSE(res.get());
 }
 
-TEST_F(SchedulerTest, TestAsyncFuture) {
-  /*
-  bool use_async = true;
+TEST_F(SchedulerTest, TestPostAsyncFuture) {
   auto do_stuff = []() {
     return 42;
   };
 
   SyncValue<int> result;
   auto coro = [&](auto context) {
-    auto future_handle = scheduler_.Post(do_stuff, use_async);
+    auto future_handle = scheduler_.Post(do_stuff, Scheduler::UseAsync);
     auto res = scheduler_.WaitOnFuture<int>(future_handle, context);
-    //auto res = future->Get(context);
     ASSERT_TRUE(res);
     result.SetValue(res.get());
   };
@@ -263,36 +259,52 @@ TEST_F(SchedulerTest, TestAsyncFuture) {
   auto res = result.WaitForValue(1s);
   ASSERT_TRUE(res);
   ASSERT_EQ(42, res.get());
-  */
 }
-
-
 
 // Stop the scheduler while it has active sleeps, semaphores, futures and coroutines
 TEST_F(SchedulerTest, TestStopWithActiveOperations) {
   SyncValue<bool> semaphore_wait_done;
-  SyncValue<bool> sleep_done;
-  SyncValue<bool> future_wait_done;
   auto semaphore_handle = scheduler_.CreateSemaphore();
-  auto future_handle = scheduler_.CreateFuture<int>();
   auto semaphore_waiter = [&](auto context) {
     scheduler_.WaitOnSemaphore(semaphore_handle, context);
     semaphore_wait_done.SetValue(true);
   };
 
+  SyncValue<bool> sleep_done;
   auto sleeper = [&](auto context) {
     scheduler_.Sleep(100s, context);
     sleep_done.SetValue(true);
   };
 
+  SyncValue<bool> future_wait_done;
+  auto future_handle = scheduler_.CreateFuture<int>();
   auto future_waiter = [&](auto context) {
     auto result = scheduler_.WaitOnFuture<int>(future_handle, context);
     future_wait_done.SetValue(true);
   };
 
+  auto sync_post_waiter = [&]() {
+    auto future = scheduler_.Post([]() {
+      std::this_thread::sleep_for(2s);
+      return 42;
+    });
+    ASSERT_EQ(42, future.get());
+  };
+
+  auto async_post_waiter = [&](auto context) {
+    auto future_handle = scheduler_.Post([]() {
+      std::this_thread::sleep_for(2s);
+      return 42;
+    }, Scheduler::UseAsync);
+    auto res = scheduler_.WaitOnFuture<int>(future_handle, context);
+    ASSERT_TRUE(res);
+    ASSERT_EQ(42, *res);
+  };
+
   scheduler_.SpawnCoroutine(semaphore_waiter);
   scheduler_.SpawnCoroutine(sleeper);
   scheduler_.SpawnCoroutine(future_waiter);
+  std::async(std::launch::async, sync_post_waiter);
 
   scheduler_.Stop();
   auto res_sem = semaphore_wait_done.WaitForValue(1s);
