@@ -38,6 +38,7 @@ public:
 
   // this method can be called from any thread (except thread_)
   ~Scheduler() {
+    //NOTE: 'Stop' must have already been called
     assert(thread_.get_id() != boost::this_thread::get_id());
     io_service_.stop();
     thread_.join();
@@ -171,6 +172,7 @@ public:
         post_func_finished_futures_.push_back(post_func_ran_p.get_future());
         func();
         post_func_ran_p.set_value(true);
+        // TODO: remove the post_func_ran future from the list here (or somewhere...)
       } else {
         //TODO: should we notify the caller in some way if we're not going to
         // run it at all?
