@@ -18,8 +18,11 @@ async_semaphore_test: test/async_semaphore_test.cc
 async_future_test: test/async_future_test.cc
 	$(CC) $(CFLAGS) -I $(GTEST_ROOT)/include -I . -I $(BOOST_INCLUDE_DIR) $(LIB_DIRS) -L $(GMOCK_ROOT)/gtest -lgtest -lgtest_main $(LIBS) test/async_future_test.cc -o test/async_future_test
 
-scheduler_test: test/scheduler_test.cc
+scheduler_test: test/scheduler_test.cc scheduler.hpp shared_scheduler_context.hpp
 	$(CC) $(CFLAGS) -I $(GTEST_ROOT)/include -I . -I $(BOOST_INCLUDE_DIR) $(LIB_DIRS) -L $(GMOCK_ROOT)/gtest -lgtest -lgtest_main $(LIBS) test/scheduler_test.cc -o test/scheduler_test
+
+shared_scheduler_test: test/shared_scheduler_context_test.cc scheduler.hpp shared_scheduler_context.hpp
+	$(CC) $(CFLAGS) -I $(GTEST_ROOT)/include -I . -I $(BOOST_INCLUDE_DIR) $(LIB_DIRS) -L $(GMOCK_ROOT)/gtest -lgtest -lgtest_main $(LIBS) test/shared_scheduler_context_test.cc -o test/shared_scheduler_test
 
 async_executor_test: test/async_executor_test.cc
 	$(CC) $(CFLAGS) -I $(GTEST_ROOT)/include -I . -I $(BOOST_INCLUDE_DIR) $(LIB_DIRS) -L $(GMOCK_ROOT)/gtest -lgtest -lgtest_main $(LIBS) test/async_executor_test.cc -o test/async_executor_test

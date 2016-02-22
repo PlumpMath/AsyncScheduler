@@ -1,6 +1,7 @@
 #include "gtest/gtest.h"
 
 #include "scheduler.hpp"
+#include "shared_scheduler_context.hpp"
 
 #include "sync_value.hpp"
 
@@ -11,9 +12,14 @@
 using namespace std::chrono;
 using namespace std;
 
+// Test the direct functionality of the scheduler (via a single SharedSchedulerContext)
 class SchedulerTest : public ::testing::Test {
 public:
-  Scheduler scheduler_;
+  SchedulerTest() :
+    scheduler_(master_scheduler_) {}
+
+  Scheduler master_scheduler_;
+  SharedSchedulerContext scheduler_;
 };
 
 TEST_F(SchedulerTest, TestSpawn) {
