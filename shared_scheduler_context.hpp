@@ -12,6 +12,7 @@
 #include "async_sleep.hpp"
 #include "async_semaphore.hpp"
 #include "scheduler.hpp"
+#include "scheduler_types.h"
 
 // A SharedSchedulerContext represnts a set of coroutines and asynchronous tasks
 //  that can be stopped as a group.  This would typically be done when trying to
@@ -28,7 +29,6 @@
 //  sleep task to the task container.
 class SharedSchedulerContext {
 public:
-  typedef int task_handle_t;
   static bool UseAsync;
   SharedSchedulerContext(Scheduler& master_scheduler) :
     master_scheduler_(master_scheduler) {
@@ -274,6 +274,10 @@ public:
   // Can only be called from the scheduler's thread
   // (i.e. this should only be called from within a coroutine
   // spawned by this scheduler)
+  //TODO: if we make the handle contain the type as well, we can relieve
+  // the caller from having to explicitly write the type when calling 
+  // WaitOnFuture (right now it has to be 'auto res = WaitOnFuture<bool>(...)', 
+  // for example
   template<typename T>
   boost::optional<T> WaitOnFuture(int future_handle, boost::asio::yield_context context) {
     assert(master_scheduler_.thread_.get_id() == boost::this_thread::get_id());
