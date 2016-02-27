@@ -1,11 +1,11 @@
 #include <functional>
 #include <chrono>
 
-#include "shared_scheduler_context.hpp"
+#include "scheduler_context.hpp"
 
 using namespace std::literals;
 
-// Show two different classes, each with their own SharedSchedulerContext,
+// Show two different classes, each with their own SchedulerContext,
 //  sharing the same master Scheduler
 
 class DoStuffOne {
@@ -31,7 +31,7 @@ public:
   }
 
 //protected:
-  SharedSchedulerContext scheduler_;
+  SchedulerContext scheduler_;
 };
 
 class DoStuffTwo {
@@ -57,7 +57,7 @@ public:
   }
 
 //protected:
-  SharedSchedulerContext scheduler_;
+  SchedulerContext scheduler_;
 };
 
 

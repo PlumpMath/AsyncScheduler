@@ -3,12 +3,14 @@
 #include "async_buffer.hpp"
 
 #include "scheduler.hpp"
+#include "scheduler_context.hpp"
 
 using namespace std::chrono_literals;
 
 int main(int argc, char* argv[]) {
-  Scheduler scheduler;
-  AsyncBuffer<int> buffer(scheduler);
+  Scheduler master_scheduler;
+  AsyncBuffer<int> buffer(master_scheduler);
+  SchedulerContext scheduler(master_scheduler);
   bool running = true;
 
   boost::thread writer([&]() {

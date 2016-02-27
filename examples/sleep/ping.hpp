@@ -4,7 +4,7 @@
 
 #include <chrono>
 
-#include "scheduler.hpp"
+#include "scheduler_context.hpp"
 
 using namespace std::literals;
 
@@ -12,6 +12,7 @@ using namespace std::literals;
 //  work inbetween.
 class Ping {
 public:
+  Ping(Scheduler& master_scheduler) : scheduler_(master_scheduler) {}
   void Start() {
     running_ = true;
     scheduler_.SpawnCoroutine(boost::bind(&Ping::Run, this, _1));
@@ -54,5 +55,5 @@ public:
 
 //protected:
   bool running_ = false;
-  Scheduler scheduler_;
+  SchedulerContext scheduler_;
 };

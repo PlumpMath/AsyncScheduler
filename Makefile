@@ -9,6 +9,8 @@ LIBS=-lboost_system -lboost_thread -lboost_coroutine -lboost_context -lboost_chr
 GTEST_ROOT=./googletest/googletest
 GMOCK_ROOT=./googletest/googlemock
 
+all: async_sleep_test async_semaphore_test async_future_test scheduler_test scheduler_context_test
+
 async_sleep_test: test/async_sleep_test.cc
 	$(CC) $(CFLAGS) -I $(GTEST_ROOT)/include -I . -I $(BOOST_INCLUDE_DIR) $(LIB_DIRS) -L $(GMOCK_ROOT)/gtest -lgtest -lgtest_main $(LIBS) test/async_sleep_test.cc -o test/async_sleep_test
 
@@ -18,11 +20,8 @@ async_semaphore_test: test/async_semaphore_test.cc
 async_future_test: test/async_future_test.cc
 	$(CC) $(CFLAGS) -I $(GTEST_ROOT)/include -I . -I $(BOOST_INCLUDE_DIR) $(LIB_DIRS) -L $(GMOCK_ROOT)/gtest -lgtest -lgtest_main $(LIBS) test/async_future_test.cc -o test/async_future_test
 
-scheduler_test: test/scheduler_test.cc scheduler.hpp shared_scheduler_context.hpp
+scheduler_test: test/scheduler_test.cc scheduler.hpp scheduler_context.hpp
 	$(CC) $(CFLAGS) -I $(GTEST_ROOT)/include -I . -I $(BOOST_INCLUDE_DIR) $(LIB_DIRS) -L $(GMOCK_ROOT)/gtest -lgtest -lgtest_main $(LIBS) test/scheduler_test.cc -o test/scheduler_test
 
-shared_scheduler_test: test/shared_scheduler_context_test.cc scheduler.hpp shared_scheduler_context.hpp
-	$(CC) $(CFLAGS) -I $(GTEST_ROOT)/include -I . -I $(BOOST_INCLUDE_DIR) $(LIB_DIRS) -L $(GMOCK_ROOT)/gtest -lgtest -lgtest_main $(LIBS) test/shared_scheduler_context_test.cc -o test/shared_scheduler_test
-
-async_executor_test: test/async_executor_test.cc
-	$(CC) $(CFLAGS) -I $(GTEST_ROOT)/include -I . -I $(BOOST_INCLUDE_DIR) $(LIB_DIRS) -L $(GMOCK_ROOT)/gtest -lgtest -lgtest_main $(LIBS) test/async_executor_test.cc -o test/async_executor_test
+scheduler_context_test: test/scheduler_context_test.cc scheduler.hpp scheduler_context.hpp
+	$(CC) $(CFLAGS) -I $(GTEST_ROOT)/include -I . -I $(BOOST_INCLUDE_DIR) $(LIB_DIRS) -L $(GMOCK_ROOT)/gtest -lgtest -lgtest_main $(LIBS) test/scheduler_context_test.cc -o test/scheduler_context_test

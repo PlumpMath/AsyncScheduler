@@ -1,7 +1,7 @@
 #include "gtest/gtest.h"
 
 #include "scheduler.hpp"
-#include "shared_scheduler_context.hpp"
+#include "scheduler_context.hpp"
 
 #include "sync_value.hpp"
 
@@ -12,14 +12,14 @@
 using namespace std::chrono;
 using namespace std;
 
-// Test the direct functionality of the scheduler (via a single SharedSchedulerContext)
+// Test the direct functionality of the scheduler (via a single SchedulerContext)
 class SchedulerTest : public ::testing::Test {
 public:
   SchedulerTest() :
     scheduler_(master_scheduler_) {}
 
   Scheduler master_scheduler_;
-  SharedSchedulerContext scheduler_;
+  SchedulerContext scheduler_;
 };
 
 TEST_F(SchedulerTest, TestSpawn) {
@@ -118,7 +118,7 @@ TEST_F(SchedulerTest, TestPostAsyncFuture) {
 
   SyncValue<int> result;
   auto coro = [&](auto context) {
-    auto future_handle = scheduler_.Post(do_stuff, Scheduler::UseAsync);
+    auto future_handle = scheduler_.Post(do_stuff, UseAsync);
     auto res = scheduler_.WaitOnFuture<int>(future_handle, context);
     ASSERT_TRUE(res);
     result.SetValue(res.get());
@@ -181,7 +181,7 @@ TEST_F(SchedulerTest, TestRetValueAsyncPostNumCopies) {
   scheduler_.Post([o = std::move(obj), &num_copies]() {
     num_copies.SetValue(o.num_copies_);
     return true;
-  }, Scheduler::UseAsync);
+  }, UseAsync);
   auto res = num_copies.WaitForValue(2s);
   ASSERT_TRUE(res);
   ASSERT_EQ(1, res.get());
@@ -358,7 +358,7 @@ TEST_F(SchedulerTest, TestStopWithActiveOperations) {
     auto future_handle = scheduler_.Post([]() {
       std::this_thread::sleep_for(2s);
       return 42;
-    }, Scheduler::UseAsync);
+    }, UseAsync);
     auto res = scheduler_.WaitOnFuture<int>(future_handle, context);
     ASSERT_TRUE(res);
     ASSERT_EQ(42, *res);

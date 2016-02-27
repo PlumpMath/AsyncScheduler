@@ -3,13 +3,14 @@
 #include <boost/optional.hpp>
 #include <list>
 
-#include "scheduler.hpp"
+#include "scheduler_context.hpp"
 
 // Rather than synchronizing access to data_ via locks, it can instead be done
 //  by posting all operations on it to a single thread.
 template<typename Key, typename Value>
 class AODataStore {
 public:
+  AODataStore(Scheduler& master_scheduler) : scheduler_(master_scheduler) {}
   void AddValue(Key key, Value value) {
     return scheduler_.Post(std::bind(&AODataStore::_DoAddValue, this, key, value));
   }
@@ -41,6 +42,6 @@ public:
     data_.erase(key);
   }
 
-  Scheduler scheduler_;
+  SchedulerContext scheduler_;
   std::map<Key, Value> data_;
 };

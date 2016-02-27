@@ -1,7 +1,7 @@
 #include "gtest/gtest.h"
 
 #include "scheduler.hpp"
-#include "shared_scheduler_context.hpp"
+#include "scheduler_context.hpp"
 
 #include "sync_value.hpp"
 
@@ -12,19 +12,19 @@
 using namespace std::chrono;
 using namespace std;
 
-// Test the multiple-context functionality of th scheduler (via multiple SharedSchedulerContexts)
-class SharedSchedulerContextTest : public ::testing::Test {
+// Test the multiple-context functionality of th scheduler (via multiple SchedulerContexts)
+class SchedulerContextTest : public ::testing::Test {
 public:
-  SharedSchedulerContextTest() :
+  SchedulerContextTest() :
     scheduler_ctx_1(parent_scheduler_),
     scheduler_ctx_2(parent_scheduler_) {}
 
   Scheduler parent_scheduler_;
-  SharedSchedulerContext scheduler_ctx_1;
-  SharedSchedulerContext scheduler_ctx_2;
+  SchedulerContext scheduler_ctx_1;
+  SchedulerContext scheduler_ctx_2;
 };
 
-TEST_F(SharedSchedulerContextTest, TestSpawn) {
+TEST_F(SchedulerContextTest, TestSpawn) {
   SyncValue<bool> ctx_one_result;
   SyncValue<bool> ctx_one_do_sleep;
   auto ctx_1 = [&](auto context) {

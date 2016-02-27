@@ -1,12 +1,14 @@
 #include <cstdlib>
 
 #include "active_object_datastore.hpp"
+#include "scheduler.hpp"
 
 #include <boost/thread.hpp>
 
 
 int main(int argc, char* argv[]) {
-  AODataStore<int, int> data;
+  Scheduler scheduler;
+  AODataStore<int, int> data(scheduler);
   bool running_ = true;
 
   boost::thread adder([&]() {

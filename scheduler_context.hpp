@@ -14,11 +14,11 @@
 #include "scheduler.hpp"
 #include "scheduler_types.h"
 
-// A SharedSchedulerContext represnts a set of coroutines and asynchronous tasks
+// A SchedulerContext represnts a set of coroutines and asynchronous tasks
 //  that can be stopped as a group.  This would typically be done when trying to
 //  shut down a class which has coroutines and suspensions on these asynchronous tasks,
 //  so when a user once to cleanup that object, they'd make sure to call 'Stop' on its
-//  SharedSchedulerContext first.  Since a context will only clean up its own coroutines
+//  SchedulerContext first.  Since a context will only clean up its own coroutines
 //  and tasks, other contexts (which share the same master scheduler) will be unaffected.
 // In order to prevent synchronizing access to the container which holds those tasks,
 //  all access to them is posted through the scheduler's internal thread.
@@ -27,15 +27,14 @@
 //  of the scheduler itself.  This allows calls like 'Sleep' to operate
 //  efficiently: no (blocking) synchronization is necessary to add and remove the 
 //  sleep task to the task container.
-class SharedSchedulerContext {
+class SchedulerContext {
 public:
-  static bool UseAsync;
-  SharedSchedulerContext(Scheduler& master_scheduler) :
+  SchedulerContext(Scheduler& master_scheduler) :
     master_scheduler_(master_scheduler) {
   }
 
   // this method can be called from any thread (except thread_)
-  ~SharedSchedulerContext() {
+  ~SchedulerContext() {
     //TODO: call stop if not stopped already (?)
   }
 
@@ -49,7 +48,7 @@ public:
   //  down safely.
   void Stop() {
     assert(master_scheduler_.thread_.get_id() != boost::this_thread::get_id());
-    printf("SharedSchedulerContext::Stop\n");
+    printf("SchedulerContext::Stop\n");
     // we need to prevent any new coroutines/async operations
     //  from being started
     auto running_state_updated = std::make_shared<std::promise<bool>>();
@@ -57,28 +56,29 @@ public:
     // Post the setting of 'running_' to the scheduler thread so that 
     //  we don't have to lock access to it
     master_scheduler_.io_service_.post([running_state_updated, this]() mutable {
-      printf("SharedSchedulerContext::Stop inside running state update function, setting to false\n");
+      printf("SchedulerContext::Stop inside running state update function, setting to false\n");
       running_ = false;
       running_state_updated->set_value(true);
     });
-    printf("SharedSchedulerContext::Stop waiting for running state to be updated\n");
+    printf("SchedulerContext::Stop waiting for running state to be updated\n");
     running_state_updated_future.wait();
-    printf("SharedSchedulerContext::Stop running state updated\n");
+    printf("SchedulerContext::Stop running state updated\n");
     // At this point, we know no new async operations or coroutines will be started
     // we need to cancel any pending async operations (which must
     //  be done via the scheduler thread)
     auto tasks_cancelled = std::make_shared<std::promise<bool>>();
     auto tasks_cancelled_future = tasks_cancelled->get_future();
     master_scheduler_.io_service_.post([tasks_cancelled, this]() mutable {
-      printf("SharedSchedulerContext::Stop inside task cancel function\n");
+      printf("SchedulerContext::Stop inside task cancel function\n");
       for (auto&& t : tasks_) {
+        printf("cancelling task %d\n", t.first);
         t.second->Cancel();
       }
       tasks_cancelled->set_value(true);
     });
-    printf("SharedSchedulerContext::Stop waiting for task cancel\n");
+    printf("SchedulerContext::Stop waiting for task cancel\n");
     tasks_cancelled_future.wait();
-    printf("SharedSchedulerContext::Stop tasks cancelled\n");
+    printf("SchedulerContext::Stop tasks cancelled\n");
 
     // we need to wait for the coroutines to finish
     // NOTE: we can safely access coro_finished_futures_ from any thread here because
@@ -86,19 +86,19 @@ public:
     //  when spawning a new coroutine, and we know that won't happen since that
     //  modification is done inside a check of 'running_' and we've already successfully
     //  set the state of 'running_' to false (above)
-    printf("SharedSchedulerContext::Stop waiting for coroutine to finish\n");
+    printf("SchedulerContext::Stop waiting for coroutine to finish\n");
     for (auto&& cff : coro_finished_futures_) {
       if (cff.valid()) {
         cff.wait();
       }
     }
-    printf("SharedSchedulerContext::Stop coroutine finished\n");
+    printf("SchedulerContext::Stop coroutine finished\n");
   }
 
   // Spawn a new coroutine
   // this method could be called from any thread
   void SpawnCoroutine(std::function<void(boost::asio::yield_context)>&& coro_func) {
-    printf("SharedSchedulerContext::SpawnCoroutine\n");
+    printf("SchedulerContext::SpawnCoroutine\n");
     auto coro_completion = std::make_shared<std::promise<bool>>();
 
     // Wrap the coroutine call so we can automatically set the coroutine completion
@@ -169,10 +169,10 @@ public:
   }
 
   // Post for non-void funcs which returns a handle to an AsyncFuture
-  // Call with something like: scheduler.Post(func, SharedSchedulerContext::UseAsync);
+  // Call with something like: scheduler.Post(func, SchedulerContext::UseAsync);
   template<typename Functor, typename = typename std::enable_if<!std::is_void<typename std::result_of<Functor()>::type>::value>::type>
   task_handle_t
-  Post(const Functor& func, bool) {
+  Post(const Functor& func, async_type_t) {
     auto future_handle = CreateFuture<typename std::result_of<Functor()>::type>();
     auto func_wrapper = [func = std::move(func), future_handle, this]() mutable {
       if (running_) {
@@ -301,5 +301,3 @@ public:
   std::list<std::future<bool>> post_func_finished_futures_;
   std::list<std::future<bool>> coro_finished_futures_;
 };
-
-bool SharedSchedulerContext::UseAsync = true;

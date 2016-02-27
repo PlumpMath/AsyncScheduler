@@ -3,9 +3,12 @@
 #include <boost/asio.hpp>
 #include <boost/thread.hpp>
 
+enum async_type_t {
+  UseAsync
+};
+
 class Scheduler {
 public:
-  static bool UseAsync;
   Scheduler() :
     work_(new boost::asio::io_service::work(io_service_)),
     thread_(boost::bind(&boost::asio::io_service::run, &io_service_)) {
@@ -21,5 +24,3 @@ public:
   boost::asio::io_service::work* work_;
   boost::thread thread_;
 };
-
-bool Scheduler::UseAsync = true;

@@ -4,7 +4,7 @@
 
 #include <list>
 
-#include "scheduler.hpp"
+#include "scheduler_context.hpp"
 #include "async_semaphore.hpp"
 
 
@@ -39,6 +39,6 @@ public:
 //protected:
   std::mutex buffer_mutex_;
   std::list<T> buffer_;
-  Scheduler& scheduler_;
-  Scheduler::task_handle_t have_data_semaphore_;
+  SchedulerContext scheduler_;
+  task_handle_t have_data_semaphore_;
 };

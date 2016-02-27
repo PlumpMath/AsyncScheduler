@@ -3,7 +3,7 @@
 #include <boost/bind.hpp>
 
 #include "scheduler.hpp"
-#include "shared_scheduler_context.hpp"
+#include "scheduler_context.hpp"
 
 using namespace std::literals;
 
@@ -44,7 +44,7 @@ public:
 
   void doStuff(boost::asio::yield_context context) {
     for (int i = 0; i <= 100; ++i) {
-      auto future_handle = scheduler_.Post(std::bind(isHappy, i), Scheduler::UseAsync);
+      auto future_handle = scheduler_.Post(std::bind(isHappy, i), UseAsync);
       auto res = scheduler_.WaitOnFuture<bool>(future_handle, context);
       if (res && res.get()) {
         printf("%d is happy\n", i);
@@ -63,5 +63,5 @@ public:
   }
 
 //protected:
-  SharedSchedulerContext scheduler_;
+  SchedulerContext scheduler_;
 };
