@@ -111,6 +111,82 @@ TEST_F(SchedulerTest, TestPostVoidFunc) {
   ASSERT_TRUE(res.get());
 }
 
+TEST_F(SchedulerTest, TestPostAsyncFuture) {
+  auto do_stuff = []() {
+    return 42;
+  };
+
+  SyncValue<int> result;
+  auto coro = [&](auto context) {
+    auto future_handle = scheduler_.Post(do_stuff, Scheduler::UseAsync);
+    auto res = scheduler_.WaitOnFuture<int>(future_handle, context);
+    ASSERT_TRUE(res);
+    result.SetValue(res.get());
+  };
+
+  scheduler_.SpawnCoroutine(coro);
+  auto res = result.WaitForValue(1s);
+  ASSERT_TRUE(res);
+  ASSERT_EQ(42, res.get());
+}
+
+// Make sure that, for an object with all the properly defined
+//  move operations, we don't copy more than necessary
+class MovableObj {
+public:
+  MovableObj(int num) : num_(num) {}
+  MovableObj(MovableObj& other) {
+    num_ = other.num_;
+    num_copies_ = other.num_copies_ + 1;
+  }
+  MovableObj(const MovableObj& other) {
+    num_ = other.num_;
+    num_copies_ = other.num_copies_ + 1;
+  }
+  MovableObj(MovableObj&& other) {
+    num_ = other.num_;
+    num_copies_ = other.num_copies_;
+  }
+
+  int num_ = 0;
+  int num_copies_ = 0;
+};
+
+TEST_F(SchedulerTest, TestVoidPostNumCopies) {
+  SyncValue<int> num_copies;
+  MovableObj obj(42);
+  scheduler_.Post([o = std::move(obj), &num_copies]() {
+    num_copies.SetValue(o.num_copies_);
+  });
+  auto res = num_copies.WaitForValue(2s);
+  ASSERT_TRUE(res);
+  ASSERT_EQ(1, res.get());
+}
+
+TEST_F(SchedulerTest, TestRetValuePostNumCopies) {
+  SyncValue<int> num_copies;
+  MovableObj obj(42);
+  scheduler_.Post([o = std::move(obj), &num_copies]() {
+    num_copies.SetValue(o.num_copies_);
+    return true;
+  });
+  auto res = num_copies.WaitForValue(2s);
+  ASSERT_TRUE(res);
+  ASSERT_EQ(1, res.get());
+}
+
+TEST_F(SchedulerTest, TestRetValueAsyncPostNumCopies) {
+  SyncValue<int> num_copies;
+  MovableObj obj(42);
+  scheduler_.Post([o = std::move(obj), &num_copies]() {
+    num_copies.SetValue(o.num_copies_);
+    return true;
+  }, Scheduler::UseAsync);
+  auto res = num_copies.WaitForValue(2s);
+  ASSERT_TRUE(res);
+  ASSERT_EQ(1, res.get());
+}
+
 // Test stopping the scheduler while a posted function is running
 // TODO: technically it's possible here that the posted function
 //  finishes before we ever call Stop.  it's a bit tricky to guarantee
@@ -246,25 +322,6 @@ TEST_F(SchedulerTest, TestStopSchedulerWhileWaitingOnFuture) {
   auto res = got_future_result.WaitForValue(1s);
   ASSERT_TRUE(res);
   ASSERT_FALSE(res.get());
-}
-
-TEST_F(SchedulerTest, TestPostAsyncFuture) {
-  auto do_stuff = []() {
-    return 42;
-  };
-
-  SyncValue<int> result;
-  auto coro = [&](auto context) {
-    auto future_handle = scheduler_.Post(do_stuff, Scheduler::UseAsync);
-    auto res = scheduler_.WaitOnFuture<int>(future_handle, context);
-    ASSERT_TRUE(res);
-    result.SetValue(res.get());
-  };
-
-  scheduler_.SpawnCoroutine(coro);
-  auto res = result.WaitForValue(1s);
-  ASSERT_TRUE(res);
-  ASSERT_EQ(42, res.get());
 }
 
 // Stop the scheduler while it has active sleeps, semaphores, futures and coroutines

@@ -160,7 +160,7 @@ public:
   template<typename Functor, typename = typename std::enable_if<std::is_void<typename std::result_of<Functor()>::type>::value>::type>
   void
   Post(const Functor& func) {
-    auto func_wrapper = [func, this]() mutable {
+    auto func_wrapper = [func = std::move(func), this]() mutable {
       if (running_) {
         func();
       }
@@ -174,7 +174,7 @@ public:
   task_handle_t
   Post(const Functor& func, bool) {
     auto future_handle = CreateFuture<typename std::result_of<Functor()>::type>();
-    auto func_wrapper = [func, future_handle, this]() mutable {
+    auto func_wrapper = [func = std::move(func), future_handle, this]() mutable {
       if (running_) {
         SetFutureValue(future_handle, func());
       }
@@ -189,7 +189,7 @@ public:
   Post(const Functor& func) {
     auto func_promise = std::make_shared<std::promise<typename std::result_of<Functor()>::type>>();
     auto func_future = func_promise->get_future();
-    auto func_wrapper = [func, func_promise, this]() mutable {
+    auto func_wrapper = [func = std::move(func), func_promise, this]() mutable {
       if (running_) {
         func_promise->set_value(func());
       }
