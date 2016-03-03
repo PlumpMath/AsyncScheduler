@@ -202,45 +202,19 @@ public:
     return func_future;
   }
 
-  // Returns a handle to the created semaphore
-  // could be called from any thread
-  task_handle_t CreateSemaphore() {
-    auto promise = std::make_shared<std::promise<int>>();
+  std::shared_ptr<AsyncSemaphore> CreateSemaphore() {
+    auto promise = std::make_shared<std::promise<std::shared_ptr<AsyncSemaphore>>>();
     auto future = promise->get_future();
     master_scheduler_.io_service_.dispatch([promise, this]() mutable {
       auto semaphore = std::make_shared<AsyncSemaphore>(master_scheduler_.io_service_);
       auto task_id = next_task_id_++;
       tasks_[task_id] = semaphore;
-      promise->set_value(task_id);
+      promise->set_value(semaphore);
     });
     return future.get();
   }
 
   // could be called from any thread
-  void RaiseSemaphore(int semaphore_handle) {
-    master_scheduler_.io_service_.dispatch([semaphore_handle, this]() {
-      if (tasks_.find(semaphore_handle) != tasks_.end()) {
-        auto semaphore = std::dynamic_pointer_cast<AsyncSemaphore>(tasks_[semaphore_handle]);
-        if (semaphore) {
-          semaphore->Raise();
-        }
-      }
-    });
-  }
-
-  // Must be called from this scheduler's thread
-  // (i.e. inside a coroutine spawned by this scheduler)
-  bool WaitOnSemaphore(int semaphore_handle, boost::asio::yield_context& context) {
-    assert(master_scheduler_.thread_.get_id() == boost::this_thread::get_id());
-    if (tasks_.find(semaphore_handle) != tasks_.end()) {
-      auto semaphore = std::dynamic_pointer_cast<AsyncSemaphore>(tasks_[semaphore_handle]);
-      if (semaphore) {
-        return semaphore->Wait(context);
-      }
-    }
-    return false;
-  }
-
   template<typename T>
   std::shared_ptr<AsyncFuture<T>> CreateFuture() {
     auto promise = std::make_shared<std::promise<std::shared_ptr<AsyncFuture<T>>>>();
@@ -254,20 +228,6 @@ public:
     return future.get();
   }
   
-  // could be called from any thread
-  template<typename T>
-  void SetFutureValue(int future_handle, T value) {
-    //TODO: change to dispatch
-    master_scheduler_.io_service_.post([future_handle, value, this]() {
-      if (tasks_.find(future_handle) != tasks_.end()) {
-        auto future = std::dynamic_pointer_cast<AsyncFuture<T>>(tasks_[future_handle]);
-        if (future) {
-          future->SetValue(value);
-        }
-      }
-    });
-  }
-
 //protected:
   Scheduler& master_scheduler_;
 

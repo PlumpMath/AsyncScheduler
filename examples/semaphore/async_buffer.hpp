@@ -23,11 +23,11 @@ public:
       std::lock_guard<std::mutex> guard(buffer_mutex_);
       buffer_.push_back(std::move(value));
     }
-    scheduler_.RaiseSemaphore(have_data_semaphore_);
+    have_data_semaphore_->Raise();
   }
 
   boost::optional<T> Read(boost::asio::yield_context& context) {
-    if (scheduler_.WaitOnSemaphore(have_data_semaphore_, context)) {
+    if (have_data_semaphore_->Wait(context)) {
       std::lock_guard<std::mutex> guard(buffer_mutex_);
       T value = std::move(buffer_.front());
       buffer_.pop_front();
@@ -40,5 +40,5 @@ public:
   std::mutex buffer_mutex_;
   std::list<T> buffer_;
   SchedulerContext scheduler_;
-  task_handle_t have_data_semaphore_;
+  std::shared_ptr<AsyncSemaphore> have_data_semaphore_;
 };

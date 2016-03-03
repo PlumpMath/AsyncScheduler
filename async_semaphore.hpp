@@ -11,6 +11,11 @@
 //  thread executing it, then things will be fine.  Note: since the
 //  Wait method suspends, it must be called on the same thread that's
 //  executing the io_service
+// TODO: rather than having asyncsemaphore/future post all calls to the
+//  io_service...is it better to have them agnostic (like before) and the
+//  scheduler wrap them with logic that enforces access on a single thread?
+//  (like an active object wrapper for semaphore/future that scheduler would
+//  use and then return that to the caller)
 class AsyncSemaphore : public AsyncTask {
 public:
   AsyncSemaphore(boost::asio::io_service& io_service) :

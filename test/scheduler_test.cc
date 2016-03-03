@@ -211,29 +211,29 @@ TEST_F(SchedulerTest, TestStopWhilePosting) {
 
 TEST_F(SchedulerTest, TestSemaphore) {
   SyncValue<bool> sem_result;
-  auto semaphore_handle = scheduler_.CreateSemaphore();
+  auto semaphore = scheduler_.CreateSemaphore();
   auto func = [&](boost::asio::yield_context context) {
-    sem_result.SetValue(scheduler_.WaitOnSemaphore(semaphore_handle, context));
+    sem_result.SetValue(semaphore->Wait(context));
   };
 
   scheduler_.SpawnCoroutine(func);
   auto res = sem_result.WaitForValue(100ms);
   ASSERT_FALSE(res);
-  scheduler_.RaiseSemaphore(semaphore_handle);
+  semaphore->Raise();
   res = sem_result.WaitForValue(100ms);
   ASSERT_TRUE(res);
   ASSERT_TRUE(res.get());
 }
 
 TEST_F(SchedulerTest, TestCreateSemaphoreFromSchedulerThread) {
-  auto wait = [&](auto sem_handle) {
-    scheduler_.RaiseSemaphore(sem_handle);
+  auto wait = [&](auto semaphore) {
+    semaphore->Raise();
   };
   SyncValue<bool> sem_wait_finished;
   auto sem_creator = [&](auto context) {
-    auto sem_handle = scheduler_.CreateSemaphore();
-    std::async(std::launch::async, wait, sem_handle);
-    scheduler_.WaitOnSemaphore(sem_handle, context);
+    auto semaphore = scheduler_.CreateSemaphore();
+    std::async(std::launch::async, wait, semaphore);
+    semaphore->Wait(context);
     sem_wait_finished.SetValue(true);
   };
 
@@ -246,10 +246,10 @@ TEST_F(SchedulerTest, TestCreateSemaphoreFromSchedulerThread) {
 TEST_F(SchedulerTest, TestStopWhileWaitingOnSemaphore) {
   SyncValue<bool> coro_run;
   SyncValue<bool> sem_result;
-  auto semaphore_handle = scheduler_.CreateSemaphore();
+  auto semaphore = scheduler_.CreateSemaphore();
   auto func = [&](boost::asio::yield_context context) {
     coro_run.SetValue(true);
-    sem_result.SetValue(scheduler_.WaitOnSemaphore(semaphore_handle, context));
+    sem_result.SetValue(semaphore->Wait(context));
   };
 
   scheduler_.SpawnCoroutine(func);
@@ -327,9 +327,9 @@ TEST_F(SchedulerTest, TestStopSchedulerWhileWaitingOnFuture) {
 // Stop the scheduler while it has active sleeps, semaphores, futures and coroutines
 TEST_F(SchedulerTest, TestStopWithActiveOperations) {
   SyncValue<bool> semaphore_wait_done;
-  auto semaphore_handle = scheduler_.CreateSemaphore();
+  auto semaphore = scheduler_.CreateSemaphore();
   auto semaphore_waiter = [&](auto context) {
-    scheduler_.WaitOnSemaphore(semaphore_handle, context);
+    semaphore->Wait(context);
     semaphore_wait_done.SetValue(true);
   };
 
