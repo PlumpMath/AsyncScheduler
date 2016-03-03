@@ -25,3 +25,6 @@ scheduler_test: test/scheduler_test.cc scheduler.hpp scheduler_context.hpp
 
 scheduler_context_test: test/scheduler_context_test.cc scheduler.hpp scheduler_context.hpp
 	$(CC) $(CFLAGS) -I $(GTEST_ROOT)/include -I . -I $(BOOST_INCLUDE_DIR) $(LIB_DIRS) -L $(GMOCK_ROOT)/gtest -lgtest -lgtest_main $(LIBS) test/scheduler_context_test.cc -o test/scheduler_context_test
+
+check: 
+	test/async_sleep_test && test/async_semaphore_test && test/async_future_test && test/scheduler_test && test/scheduler_context_test

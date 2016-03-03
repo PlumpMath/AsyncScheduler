@@ -44,8 +44,8 @@ public:
 
   void doStuff(boost::asio::yield_context context) {
     for (int i = 0; i <= 100; ++i) {
-      auto future_handle = scheduler_.Post(std::bind(isHappy, i), UseAsync);
-      auto res = scheduler_.WaitOnFuture<bool>(future_handle, context);
+      auto future = scheduler_.Post(std::bind(isHappy, i), UseAsync);
+      auto res = future->Get(context);
       if (res && res.get()) {
         printf("%d is happy\n", i);
       }

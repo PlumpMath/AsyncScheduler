@@ -175,16 +175,16 @@ public:
   // Post for non-void funcs which returns a handle to an AsyncFuture
   // Call with something like: scheduler.Post(func, SchedulerContext::UseAsync);
   template<typename Functor, typename = typename std::enable_if<!std::is_void<typename std::result_of<Functor()>::type>::value>::type>
-  task_handle_t
+  std::shared_ptr<AsyncFuture<typename std::result_of<Functor()>::type>>
   Post(const Functor& func, async_type_t) {
-    auto future_handle = CreateFuture<typename std::result_of<Functor()>::type>();
-    auto func_wrapper = [func = std::move(func), future_handle, this]() mutable {
+    auto future = CreateFuture<typename std::result_of<Functor()>::type>();
+    auto func_wrapper = [func = std::move(func), future, this]() mutable {
       if (running_) {
-        SetFutureValue(future_handle, func());
+        future->SetValue(func());
       }
     };
     master_scheduler_.io_service_.post(std::move(func_wrapper));
-    return future_handle;
+    return future;
   }
 
   // For non-void funcs.  Returns a blocking future
@@ -241,22 +241,15 @@ public:
     return false;
   }
 
-  // We can afford to block on getting the future here because:
-  // 1) If this is called on the scheduler thread, 'dispatch'
-  //     will execute the posted code inline, so we'll get it immediately
-  // 2) If this is called on a non-scheduler thread, then we know the scheduler
-  //     thread is free to service the posted task and will complete the future
-  //     soon.  Note: because this may block, it shouldn't be called in a place
-  //     where that's unacceptable.
   template<typename T>
-  task_handle_t CreateFuture() {
-    auto promise = std::make_shared<std::promise<int>>();
+  std::shared_ptr<AsyncFuture<T>> CreateFuture() {
+    auto promise = std::make_shared<std::promise<std::shared_ptr<AsyncFuture<T>>>>();
     auto future = promise->get_future();
     master_scheduler_.io_service_.dispatch([promise, this]() mutable {
-      auto semaphore = std::make_shared<AsyncFuture<T>>(master_scheduler_.io_service_);
+      auto future = std::make_shared<AsyncFuture<T>>(master_scheduler_.io_service_);
       auto task_id = next_task_id_++;
-      tasks_[task_id] = semaphore;
-      promise->set_value(task_id);
+      tasks_[task_id] = future;
+      promise->set_value(future);
     });
     return future.get();
   }
@@ -273,25 +266,6 @@ public:
         }
       }
     });
-  }
-
-  // Can only be called from the scheduler's thread
-  // (i.e. this should only be called from within a coroutine
-  // spawned by this scheduler)
-  //TODO: if we make the handle contain the type as well, we can relieve
-  // the caller from having to explicitly write the type when calling 
-  // WaitOnFuture (right now it has to be 'auto res = WaitOnFuture<bool>(...)', 
-  // for example
-  template<typename T>
-  boost::optional<T> WaitOnFuture(int future_handle, boost::asio::yield_context context) {
-    assert(master_scheduler_.thread_.get_id() == boost::this_thread::get_id());
-    if (tasks_.find(future_handle) != tasks_.end()) {
-      auto future = std::dynamic_pointer_cast<AsyncFuture<T>>(tasks_[future_handle]);
-      if (future) {
-        return future->Get(context);
-      }
-    }
-    return false;
   }
 
 //protected:

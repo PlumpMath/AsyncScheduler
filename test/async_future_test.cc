@@ -27,9 +27,11 @@ TEST_F(AsyncFutureTest, TestGetAndSet) {
     wait_result.SetValue(async_future_.Get(context));
   };
   boost::asio::spawn(io_service_, move(wait_func));
+  // Run once to spawn the coroutine
   io_service_.run_one();
   async_future_.SetValue(42);
-  io_service_.run_one();
+  // Let the SetValue execute and the coro resume
+  io_service_.run();
   auto res = wait_result.WaitForValue(1s);
   ASSERT_TRUE(res);
   boost::optional<int> value = res.get();
@@ -45,7 +47,7 @@ TEST_F(AsyncFutureTest, TestSetAndGet) {
   };
   boost::asio::spawn(io_service_, move(wait_func));
   async_future_.SetValue(42);
-  io_service_.run_one();
+  io_service_.run();
   auto res = wait_result.WaitForValue(1s);
   ASSERT_TRUE(res);
   boost::optional<int> value = res.get();
@@ -62,7 +64,7 @@ TEST_F(AsyncFutureTest, TestCancel) {
   boost::asio::spawn(io_service_, move(wait_func));
   io_service_.run_one();
   async_future_.Cancel();
-  io_service_.run_one();
+  io_service_.run();
   auto res = wait_result.WaitForValue(1s);
   ASSERT_TRUE(res);
   boost::optional<int> value = res.get();
@@ -77,7 +79,7 @@ TEST_F(AsyncFutureTest, TestGetCancelled) {
   };
   boost::asio::spawn(io_service_, move(wait_func));
   async_future_.Cancel();
-  io_service_.run_one();
+  io_service_.run();
   auto res = wait_result.WaitForValue(1s);
   ASSERT_TRUE(res);
   boost::optional<int> value = res.get();

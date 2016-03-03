@@ -118,8 +118,8 @@ TEST_F(SchedulerTest, TestPostAsyncFuture) {
 
   SyncValue<int> result;
   auto coro = [&](auto context) {
-    auto future_handle = scheduler_.Post(do_stuff, UseAsync);
-    auto res = scheduler_.WaitOnFuture<int>(future_handle, context);
+    auto future = scheduler_.Post(do_stuff, UseAsync);
+    auto res = future->Get(context);
     ASSERT_TRUE(res);
     result.SetValue(res.get());
   };
@@ -262,9 +262,9 @@ TEST_F(SchedulerTest, TestStopWhileWaitingOnSemaphore) {
 
 TEST_F(SchedulerTest, TestCreateFutureFromNonSchedulerThread) {
   SyncValue<int> fut_result;
-  auto future_handle = scheduler_.CreateFuture<int>();
+  auto future = scheduler_.CreateFuture<int>();
   auto waiter = [&](boost::asio::yield_context context) {
-    auto result = scheduler_.WaitOnFuture<int>(future_handle, context);
+    auto result = future->Get(context);
     if (result) {
       fut_result.SetValue(result.get());
     }
@@ -274,7 +274,7 @@ TEST_F(SchedulerTest, TestCreateFutureFromNonSchedulerThread) {
     for (int i = 0; i < 1000; ++i) {
       x += i;
     }
-    scheduler_.SetFutureValue(future_handle, x);
+    future->SetValue(x);
   });
   scheduler_.SpawnCoroutine(waiter);
   auto res = fut_result.WaitForValue(1s);
@@ -284,17 +284,17 @@ TEST_F(SchedulerTest, TestCreateFutureFromNonSchedulerThread) {
 
 TEST_F(SchedulerTest, TestCreateFutureFromSchedulerThread) {
   SyncValue<int> fut_result;
-  auto do_work =[&](int future_handle) {
+  auto do_work =[&](auto future) {
     int x = 0;
     for (int i = 0; i < 1000; ++i) {
       x += i;
     }
-    scheduler_.SetFutureValue(future_handle, x);
+    future->SetValue(x);
   };
   auto waiter = [&](boost::asio::yield_context context) {
-    auto future_handle = scheduler_.CreateFuture<int>();
-    std::async(std::launch::async, do_work, future_handle);
-    auto res = scheduler_.WaitOnFuture<int>(future_handle, context);
+    auto future = scheduler_.CreateFuture<int>();
+    std::async(std::launch::async, do_work, future);
+    auto res = future->Get(context);
     if (res) {
       fut_result.SetValue(res.get());
     }
@@ -309,10 +309,10 @@ TEST_F(SchedulerTest, TestCreateFutureFromSchedulerThread) {
 TEST_F(SchedulerTest, TestStopSchedulerWhileWaitingOnFuture) {
   SyncValue<bool> coro_started;
   SyncValue<bool> got_future_result;
-  auto future_handle = scheduler_.CreateFuture<int>();
+  auto future = scheduler_.CreateFuture<int>();
   auto waiter = [&](boost::asio::yield_context context) {
     coro_started.SetValue(true);
-    auto result = scheduler_.WaitOnFuture<int>(future_handle, context);
+    auto result = future->Get(context);
     got_future_result.SetValue(!!result);
   };
 
@@ -340,9 +340,9 @@ TEST_F(SchedulerTest, TestStopWithActiveOperations) {
   };
 
   SyncValue<bool> future_wait_done;
-  auto future_handle = scheduler_.CreateFuture<int>();
+  auto future = scheduler_.CreateFuture<int>();
   auto future_waiter = [&](auto context) {
-    auto result = scheduler_.WaitOnFuture<int>(future_handle, context);
+    auto result = future->Get(context);
     future_wait_done.SetValue(true);
   };
 
@@ -358,11 +358,11 @@ TEST_F(SchedulerTest, TestStopWithActiveOperations) {
   };
 
   auto async_post_waiter = [&](auto context) {
-    auto future_handle = scheduler_.Post([]() {
+    auto future = scheduler_.Post([]() {
       std::this_thread::sleep_for(2s);
       return 42;
     }, UseAsync);
-    auto res = scheduler_.WaitOnFuture<int>(future_handle, context);
+    auto res = future->Get(context);
     ASSERT_TRUE(res);
     ASSERT_EQ(42, *res);
   };
