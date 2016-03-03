@@ -31,7 +31,7 @@ TEST_F(AsyncSemaphoreTest, TestWaitAndRaise) {
   boost::asio::spawn(io_service_, move(wait_func));
   io_service_.run_one();
   async_semaphore_.Raise();
-  io_service_.run_one();
+  io_service_.run();
   auto res = wait_result.WaitForValue(1s);
   ASSERT_TRUE(res);
   ASSERT_TRUE(res.get());
@@ -45,9 +45,7 @@ TEST_F(AsyncSemaphoreTest, TestWaitOnAlreadyRaised) {
   };
   boost::asio::spawn(io_service_, move(wait_func));
   async_semaphore_.Raise();
-  // The call to Wait should return immediately here, so we
-  //  should only need to call run_one once
-  io_service_.run_one();
+  io_service_.run();
   auto res = wait_result.WaitForValue(1s);
   ASSERT_TRUE(res);
   ASSERT_TRUE(res.get());
@@ -64,9 +62,7 @@ TEST_F(AsyncSemaphoreTest, TestRaiseTwiceWaitTwice) {
   boost::asio::spawn(io_service_, move(wait_func));
   async_semaphore_.Raise();
   async_semaphore_.Raise();
-  // The calls to Wait should return immediately here, so we
-  //  should only need to call run_one once
-  io_service_.run_one();
+  io_service_.run();
   auto res = wait_result_one.WaitForValue(1s);
   ASSERT_TRUE(res);
   ASSERT_TRUE(res.get());
@@ -86,6 +82,9 @@ TEST_F(AsyncSemaphoreTest, TestWaitTwiceRaiseTwice) {
   boost::asio::spawn(io_service_, move(wait_func));
   io_service_.run_one();
   async_semaphore_.Raise();
+  // run once for the 'raise' to execute
+  io_service_.run_one();
+  // run again for the wait to execute
   io_service_.run_one();
   auto res = wait_result_one.WaitForValue(1s);
   ASSERT_TRUE(res);
@@ -94,6 +93,9 @@ TEST_F(AsyncSemaphoreTest, TestWaitTwiceRaiseTwice) {
   // It shouldn't have completed yet
   ASSERT_FALSE(res);
   async_semaphore_.Raise();
+  // run once for the 'raise' to execute
+  io_service_.run_one();
+  // run again for the wait to execute
   io_service_.run_one();
   res = wait_result_two.WaitForValue(1s);
   ASSERT_TRUE(res);
@@ -109,7 +111,7 @@ TEST_F(AsyncSemaphoreTest, TestCancel) {
   boost::asio::spawn(io_service_, move(wait_func));
   io_service_.run_one();
   async_semaphore_.Cancel();
-  io_service_.run_one();
+  io_service_.run();
   auto res = wait_result.WaitForValue(1s);
   ASSERT_TRUE(res);
   ASSERT_FALSE(res.get());
@@ -123,7 +125,7 @@ TEST_F(AsyncSemaphoreTest, TestWaitOnCancelled) {
   };
   boost::asio::spawn(io_service_, move(wait_func));
   async_semaphore_.Cancel();
-  io_service_.run_one();
+  io_service_.run();
   auto res = wait_result.WaitForValue(1s);
   ASSERT_TRUE(res);
   ASSERT_FALSE(res.get());
