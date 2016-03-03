@@ -60,7 +60,7 @@ TEST_F(SchedulerTest, TestSpawnStopped) {
   };
   scheduler_.Stop();
   scheduler_.SpawnCoroutine(spawn_func);
-  auto res = func_spawned.WaitForValue(1s);
+  auto res = func_spawned.WaitForValue(10ms);
   ASSERT_FALSE(res);
 }
 
@@ -68,7 +68,7 @@ TEST_F(SchedulerTest, TestSpawnStopped) {
 TEST_F(SchedulerTest, TestAsyncSleep) {
   SyncValue<bool> sleep_result;
   auto sleeper = [&](boost::asio::yield_context context) {
-    sleep_result.SetValue(scheduler_.Sleep(100ms, context));
+    sleep_result.SetValue(scheduler_.Sleep(10ms, context));
   };
   scheduler_.SpawnCoroutine(sleeper);
   auto res = sleep_result.WaitForValue(1s);
@@ -346,6 +346,9 @@ TEST_F(SchedulerTest, TestStopWithActiveOperations) {
     future_wait_done.SetValue(true);
   };
 
+  // this long sleep slows down the tests, but it's an attempt
+  //  to workaround the fact that we can't really guarantee this
+  //  will still be running by the time we call stop
   auto sync_post_waiter = [&]() {
     auto future = scheduler_.Post([]() {
       std::this_thread::sleep_for(2s);
