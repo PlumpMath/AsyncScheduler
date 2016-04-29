@@ -14,6 +14,10 @@ public:
     cancelled_(false),
     timer_(io_service) {
   }
+  AsyncSleep(AsyncSleep&) = delete;
+  AsyncSleep(AsyncSleep&&) = delete;
+  AsyncSleep& operator=(AsyncSleep&) = delete;
+  AsyncSleep& operator=(AsyncSleep&&) = delete;
 
   bool Sleep(
       const sc::duration<double>& duration,

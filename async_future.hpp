@@ -25,6 +25,10 @@ public:
     io_service_(io_service),
     semaphore_(io_service) {
   }
+  AsyncFuture(AsyncFuture&) = delete;
+  AsyncFuture(AsyncFuture&&) = delete;
+  AsyncFuture& operator=(AsyncFuture&) = delete;
+  AsyncFuture& operator=(AsyncFuture&&) = delete;
 
   // Can be called from any thread, will be posted onto
   //  the execution thread
