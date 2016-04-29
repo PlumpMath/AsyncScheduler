@@ -22,6 +22,10 @@ public:
     io_service_(io_service),
     timer_(io_service) {
   }
+  AsyncSemaphore(AsyncSemaphore&) = delete;
+  AsyncSemaphore(AsyncSemaphore&&) = delete;
+  AsyncSemaphore& operator=(AsyncSemaphore&) = delete;
+  AsyncSemaphore& operator=(AsyncSemaphore&&) = delete;
 
   // Can be called from any thread, will be posted onto
   //  the execution thread
