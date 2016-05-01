@@ -6,7 +6,8 @@
 using namespace std::literals;
 
 // Show two different classes, each with their own SchedulerContext,
-//  sharing the same master Scheduler
+//  sharing the same master Scheduler.  Show that shutting down one context
+//  doesn't affect the other.
 
 class DoStuffOne {
 public:
