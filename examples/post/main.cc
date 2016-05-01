@@ -1,14 +1,17 @@
 #include <cstdlib>
 
-#include "active_object_datastore.hpp"
+#include "datastore.hpp"
 #include "scheduler.hpp"
 
 #include <boost/thread.hpp>
 
 
+// Access the datastore from 3 different threads, all doing different
+//  modification operations, to show the datastore can handle it even though
+//  it never locks access
 int main(int argc, char* argv[]) {
   Scheduler scheduler;
-  AODataStore<int, int> data(scheduler);
+  DataStore<int, int> data(scheduler);
   bool running_ = true;
 
   boost::thread adder([&]() {

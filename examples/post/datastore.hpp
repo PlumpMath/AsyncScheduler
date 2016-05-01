@@ -8,22 +8,22 @@
 // Rather than synchronizing access to data_ via locks, it can instead be done
 //  by posting all operations on it to a single thread.
 template<typename Key, typename Value>
-class AODataStore {
+class DataStore {
 public:
-  AODataStore(Scheduler& master_scheduler) : scheduler_(master_scheduler) {}
+  DataStore(Scheduler& master_scheduler) : scheduler_(master_scheduler) {}
   void AddValue(Key key, Value value) {
-    return scheduler_.Post(std::bind(&AODataStore::_DoAddValue, this, key, value));
+    return scheduler_.Post(std::bind(&DataStore::_DoAddValue, this, key, value));
   }
 
   boost::optional<Value> GetValue(int key) {
-    auto res = scheduler_.Post(std::bind(&AODataStore::_DoGetValue, this, key));
+    auto res = scheduler_.Post(std::bind(&DataStore::_DoGetValue, this, key));
     // We could just return the future here, but doing it this way totally hides
-    //  the asynchronous behavior of the AODataStore implementation from the user
+    //  the asynchronous behavior of the DataStore implementation from the user
     return res.get();
   }
 
   void RemoveValue(int key) {
-    return scheduler_.Post(std::bind(&AODataStore::_DoRemoveValue, this, key));
+    return scheduler_.Post(std::bind(&DataStore::_DoRemoveValue, this, key));
   }
 
 //protected:
