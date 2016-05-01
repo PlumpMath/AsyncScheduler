@@ -18,10 +18,10 @@
 static const bool debug = false;
 #define DEBUG if (debug) 
 
-// A SchedulerContext represnts a set of coroutines and asynchronous tasks
+// A SchedulerContext represents a set of coroutines and asynchronous tasks
 //  that can be stopped as a group.  This would typically be done when trying to
 //  shut down a class which has coroutines and suspensions on these asynchronous tasks,
-//  so when a user once to cleanup that object, they'd make sure to call 'Stop' on its
+//  so when a user wants to cleanup that object, they'd make sure to call 'Stop' on its
 //  SchedulerContext first.  Since a context will only clean up its own coroutines
 //  and tasks, other contexts (which share the same master scheduler) will be unaffected.
 // In order to prevent synchronizing access to the container which holds those tasks,
@@ -37,12 +37,13 @@ public:
     master_scheduler_(master_scheduler) {
   }
 
-  // this method can be called from any thread (except thread_)
+  // this method can be called from any thread except the scheduler's internal thread
   ~SchedulerContext() {
+    assert(master_scheduler_.thread_.get_id() != boost::this_thread::get_id());
     //TODO: call stop if not stopped already (?)
   }
 
-  // this method could be called from any thread (except the scheduler thread)
+  // Can be called from anythread except the scheduler's internal thread
   // it will block until the all the following conditions are met:
   //  1) the running state of the scheduler has been halted, so we know
   //      no more coroutines or asynchronous tasks will be initiated
@@ -53,38 +54,39 @@ public:
   void Stop() {
     assert(master_scheduler_.thread_.get_id() != boost::this_thread::get_id());
     DEBUG printf("SchedulerContext::Stop\n");
+    // Helper to post a function to the scheduler thread and wait until
+    //  its execution is finished
+    auto postAndWaitHelper = [this](auto func) {
+      auto executed = std::make_shared<std::promise<bool>>();
+      auto executed_future = executed->get_future();
+      master_scheduler_.io_service_.post([executed, &func]() {
+        func();
+        executed->set_value(true);
+      });
+      executed_future.wait();
+    };
     // we need to prevent any new coroutines/async operations
     //  from being started
-    auto running_state_updated = std::make_shared<std::promise<bool>>();
-    auto running_state_updated_future = running_state_updated->get_future();
     // Post the setting of 'running_' to the scheduler thread so that 
     //  we don't have to lock access to it
-    master_scheduler_.io_service_.post([running_state_updated, this]() mutable {
-      DEBUG printf("SchedulerContext::Stop inside running state update function, setting to false\n");
-      running_ = false;
-      running_state_updated->set_value(true);
-    });
     DEBUG printf("SchedulerContext::Stop waiting for running state to be updated\n");
-    running_state_updated_future.wait();
+    postAndWaitHelper([this]() {
+      running_ = false;
+    });
     DEBUG printf("SchedulerContext::Stop running state updated\n");
     // At this point, we know no new async operations or coroutines will be started
+
     // we need to cancel any pending async operations (which must
     //  be done via the scheduler thread)
-    auto tasks_cancelled = std::make_shared<std::promise<bool>>();
-    auto tasks_cancelled_future = tasks_cancelled->get_future();
-    master_scheduler_.io_service_.post([tasks_cancelled, this]() mutable {
-      DEBUG printf("SchedulerContext::Stop inside task cancel function\n");
+    DEBUG printf("SchedulerContext::Stop waiting for task cancel\n");
+    postAndWaitHelper([this]() {
       for (auto&& t : tasks_) {
         DEBUG printf("cancelling task %d\n", t.first);
         t.second->Cancel();
       }
-      tasks_cancelled->set_value(true);
     });
-    DEBUG printf("SchedulerContext::Stop waiting for task cancel\n");
-    tasks_cancelled_future.wait();
     DEBUG printf("SchedulerContext::Stop tasks cancelled\n");
-
-    // we need to wait for the coroutines to finish
+    // wait for all coroutines to finish
     // NOTE: we can safely access coro_finished_futures_ from any thread here because
     //  the only other place it gets accessed is from within the scheduler thread
     //  when spawning a new coroutine, and we know that won't happen since that
@@ -137,8 +139,8 @@ public:
   //  sleep executed successfully (slept for the entire time), false if
   //  it was awoken early (the sleep task was cancelled)
   // Can only be called from this scheduler's worker thread
-  // (i.e. this should only be called from within a coroutine
-  // spawned by this scheduler)
+  //  (i.e. this should only be called from within a coroutine
+  //  spawned by this scheduler)
   bool Sleep(
       const std::chrono::duration<double>& duration,
       boost::asio::yield_context& context) {
@@ -156,6 +158,7 @@ public:
 
   // Post a provided function to the scheduler to be executed by the scheduler's thread.
   // Specialization for void funcs
+  // Can be called from any thread
   // NOTE: we don't need to track the completion of the posted functions added of
   //  the 'Post' methods because, since they're executed synchronously, we know they'll
   //  be done by the time 'Stop' would have gotten around to waiting on their futures
@@ -169,11 +172,13 @@ public:
         func();
       }
     };
+    // we don't 'dispatch' here so we don't sometimes execute inline and sometimes async
     master_scheduler_.io_service_.post(std::move(func_wrapper));
   }
 
-  // Post for non-void funcs which returns a handle to an AsyncFuture
+  // Post for non-void funcs which returns an AsyncFuture
   // Call with something like: scheduler.Post(func, SchedulerContext::UseAsync);
+  // Can be called from any thread
   template<typename Functor, typename = typename std::enable_if<!std::is_void<typename std::result_of<Functor()>::type>::value>::type>
   std::shared_ptr<AsyncFuture<typename std::result_of<Functor()>::type>>
   Post(const Functor& func, async_type_t) {
@@ -182,12 +187,14 @@ public:
       if (running_) {
         future->SetValue(func());
       }
+      //TODO: what value do we set on the promise if we're no longer running?
     };
     master_scheduler_.io_service_.post(std::move(func_wrapper));
     return future;
   }
 
   // For non-void funcs.  Returns a blocking future
+  // Can be called from any thread
   template<typename Functor, typename = typename std::enable_if<!std::is_void<typename std::result_of<Functor()>::type>::value>::type>
   std::future<typename std::result_of<Functor()>::type>
   Post(const Functor& func) {
@@ -197,11 +204,13 @@ public:
       if (running_) {
         func_promise->set_value(func());
       }
+      //TODO: what value do we set on the promise if we're no longer running?
     };
     master_scheduler_.io_service_.post(std::move(func_wrapper));
     return func_future;
   }
 
+  // Can be called from any thread
   std::shared_ptr<AsyncSemaphore> CreateSemaphore() {
     auto promise = std::make_shared<std::promise<std::shared_ptr<AsyncSemaphore>>>();
     auto future = promise->get_future();
@@ -214,7 +223,7 @@ public:
     return future.get();
   }
 
-  // could be called from any thread
+  // Can be called from any thread
   template<typename T>
   std::shared_ptr<AsyncFuture<T>> CreateFuture() {
     auto promise = std::make_shared<std::promise<std::shared_ptr<AsyncFuture<T>>>>();

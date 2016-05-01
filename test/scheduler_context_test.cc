@@ -12,7 +12,7 @@
 using namespace std::chrono;
 using namespace std;
 
-// Test the multiple-context functionality of th scheduler (via multiple SchedulerContexts)
+// Test the multiple-context functionality of the scheduler (via multiple SchedulerContexts)
 class SchedulerContextTest : public ::testing::Test {
 public:
   SchedulerContextTest() :
