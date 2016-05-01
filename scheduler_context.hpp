@@ -16,7 +16,7 @@
 
 // Really hacky method of enabled/disabling debug prints for now
 static const bool debug = false;
-#define DEBUG if (debug) 
+#define DEBUG_LOG if (debug) 
 
 // A SchedulerContext represents a set of coroutines and asynchronous tasks
 //  that can be stopped as a group.  This would typically be done when trying to
@@ -53,7 +53,7 @@ public:
   //  down safely.
   void Stop() {
     assert(master_scheduler_.thread_.get_id() != boost::this_thread::get_id());
-    DEBUG printf("SchedulerContext::Stop\n");
+    DEBUG_LOG printf("SchedulerContext::Stop\n");
     // Helper to post a function to the scheduler thread and wait until
     //  its execution is finished
     auto postAndWaitHelper = [this](auto func) {
@@ -69,63 +69,63 @@ public:
     //  from being started
     // Post the setting of 'running_' to the scheduler thread so that 
     //  we don't have to lock access to it
-    DEBUG printf("SchedulerContext::Stop waiting for running state to be updated\n");
+    DEBUG_LOG printf("SchedulerContext::Stop waiting for running state to be updated\n");
     postAndWaitHelper([this]() {
       running_ = false;
     });
-    DEBUG printf("SchedulerContext::Stop running state updated\n");
+    DEBUG_LOG printf("SchedulerContext::Stop running state updated\n");
     // At this point, we know no new async operations or coroutines will be started
 
     // we need to cancel any pending async operations (which must
     //  be done via the scheduler thread)
-    DEBUG printf("SchedulerContext::Stop waiting for task cancel\n");
+    DEBUG_LOG printf("SchedulerContext::Stop waiting for task cancel\n");
     postAndWaitHelper([this]() {
       for (auto&& t : tasks_) {
-        DEBUG printf("cancelling task %d\n", t.first);
+        DEBUG_LOG printf("cancelling task %d\n", t.first);
         t.second->Cancel();
       }
     });
-    DEBUG printf("SchedulerContext::Stop tasks cancelled\n");
+    DEBUG_LOG printf("SchedulerContext::Stop tasks cancelled\n");
     // wait for all coroutines to finish
     // NOTE: we can safely access coro_finished_futures_ from any thread here because
     //  the only other place it gets accessed is from within the scheduler thread
     //  when spawning a new coroutine, and we know that won't happen since that
     //  modification is done inside a check of 'running_' and we've already successfully
     //  set the state of 'running_' to false (above)
-    DEBUG printf("SchedulerContext::Stop waiting for coroutine to finish\n");
+    DEBUG_LOG printf("SchedulerContext::Stop waiting for coroutine to finish\n");
     for (auto&& cff : coro_finished_futures_) {
       if (cff.valid()) {
         cff.wait();
       }
     }
-    DEBUG printf("SchedulerContext::Stop coroutine finished\n");
+    DEBUG_LOG printf("SchedulerContext::Stop coroutine finished\n");
   }
 
   // Spawn a new coroutine
   // this method could be called from any thread
   void SpawnCoroutine(std::function<void(boost::asio::yield_context)>&& coro_func) {
-    DEBUG printf("SchedulerContext::SpawnCoroutine\n");
+    DEBUG_LOG printf("SchedulerContext::SpawnCoroutine\n");
     auto coro_completion = std::make_shared<std::promise<bool>>();
 
     // Wrap the coroutine call so we can automatically set the coroutine completion
     //  future when it exits
     auto coro_wrapper = [coro_completion, cf = std::move(coro_func)](boost::asio::yield_context context) {
-      DEBUG printf("Inside coroutine wrapper, running coroutine function\n");
+      DEBUG_LOG printf("Inside coroutine wrapper, running coroutine function\n");
       cf(context);
-      DEBUG printf("Inside coroutine wrapper, finished running coroutine function, completing promise\n");
+      DEBUG_LOG printf("Inside coroutine wrapper, finished running coroutine function, completing promise\n");
       coro_completion->set_value(true);
     };
 
     // Wrap the call to spawn so we can check 'running_' from the scheduler thread
     auto spawn_wrapper = [coro_completion, c = std::move(coro_wrapper), this]() {
       assert(master_scheduler_.thread_.get_id() == boost::this_thread::get_id());
-      DEBUG printf("Inside spawn wrapper, checking running state\n");
+      DEBUG_LOG printf("Inside spawn wrapper, checking running state\n");
       if (running_) {
         coro_finished_futures_.push_back(coro_completion->get_future());
-        DEBUG printf("Inside spawn wrapper, still running, spawning coroutine \n");
+        DEBUG_LOG printf("Inside spawn wrapper, still running, spawning coroutine \n");
         boost::asio::spawn(master_scheduler_.io_service_, std::move(c));
       } else {
-        DEBUG printf("Inside spawn wrapper, not running, not spawning coroutine\n");
+        DEBUG_LOG printf("Inside spawn wrapper, not running, not spawning coroutine\n");
         coro_completion->set_value(false);
       }
     };
