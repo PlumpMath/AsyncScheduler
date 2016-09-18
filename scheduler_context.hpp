@@ -43,6 +43,14 @@ public:
     //TODO: call stop if not stopped already (?)
   }
 
+  boost::asio::io_service& GetIoService() {
+    return master_scheduler_.io_service_;
+  }
+
+  void VerifyInIoServiceThread() {
+    assert(master_scheduler_.thread_.get_id() == boost::this_thread::get_id());
+  }
+
   // Can be called from anythread except the scheduler's internal thread
   // it will block until the all the following conditions are met:
   //  1) the running state of the scheduler has been halted, so we know
